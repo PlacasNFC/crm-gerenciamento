@@ -1,36 +1,32 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Placas NFC · CRM
 
-## Getting Started
+CRM simples para controlar vendas (Mercado Livre, Shopee, TikTok Shop, direto), entradas/saídas e entregas.
 
-First, run the development server:
+- **Stack:** Next.js 15 (App Router, Server Actions) + Postgres (Neon, via Vercel Marketplace)
+- **Login:** usuário único definido por `ADMIN_USER` / `ADMIN_PASSWORD` (sessão JWT em cookie httpOnly, 7 dias)
+- **Tabelas:** criadas automaticamente na primeira requisição (`lib/db.ts`)
 
+## Telas
+- **Resumo** — faturamento bruto, líquido, lucro por canal e resultado do mês
+- **Vendas** — cadastro/edição de pedidos com taxas, frete e custo
+- **Entregas** — pedidos em aberto, status e código de rastreio
+- **Entradas e saídas** — despesas e receitas fora dos marketplaces
+
+## Rodar local
 ```bash
+vercel env pull .env.local
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Variáveis de ambiente
+| Nome | Descrição |
+| --- | --- |
+| `DATABASE_URL` | Postgres (criada pela integração Neon) |
+| `AUTH_SECRET` | segredo do JWT (≥ 32 caracteres) |
+| `ADMIN_USER` / `ADMIN_PASSWORD` | credenciais de acesso |
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Para trocar a senha: `vercel env rm ADMIN_PASSWORD production` → `vercel env add ADMIN_PASSWORD production` → redeploy.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Deploy
+Push na `main` → deploy de produção automático na Vercel. Branches/PRs → preview. GitHub Actions roda lint, typecheck e build.
