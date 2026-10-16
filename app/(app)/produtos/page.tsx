@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { sql } from "@/lib/db";
+import { sql, ensureSchema } from "@/lib/db";
 import { brl } from "@/lib/constants";
 import { Abas, BotaoLink, Cabecalho, Tag, Vazio } from "@/components/ui";
 
@@ -8,6 +8,7 @@ export const dynamic = "force-dynamic";
 type Linha = { id: number; sku: string; nome: string; ncm: string | null; unidade: string; preco_venda: string; saldo: number; estoque_minimo: string; ativo: boolean };
 
 export default async function Produtos({ searchParams }: { searchParams: Promise<{ q?: string; f?: string }> }) {
+  await ensureSchema();
   const sp = await searchParams;
   const q = sp.q?.trim() ?? "";
   const f = sp.f === "inativos" ? "inativos" : "ativos";

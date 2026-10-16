@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { linhas, sql } from "@/lib/db";
+import { linhas, sql, ensureSchema } from "@/lib/db";
 import { brl } from "@/lib/constants";
 import { Abas, Cabecalho, Kpi, Tag, Vazio } from "@/components/ui";
 
@@ -8,6 +8,7 @@ export const dynamic = "force-dynamic";
 type Linha = { id: number; sku: string; nome: string; unidade: string; custo: string; preco_venda: string; estoque_minimo: string; saldo: number; vendidos30: number };
 
 export default async function Estoque({ searchParams }: { searchParams: Promise<{ f?: string }> }) {
+  await ensureSchema();
   const f = (await searchParams).f === "baixo" ? "baixo" : "todos";
   const rows = await linhas<Linha>(sql`SELECT p.id, p.sku, p.nome, p.unidade, p.custo, p.preco_venda, p.estoque_minimo,
       COALESCE((SELECT SUM(quantidade) FROM estoque_movs m WHERE m.produto_id = p.id), 0)::float AS saldo,

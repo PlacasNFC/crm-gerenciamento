@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { linhas, sql } from "@/lib/db";
+import { linhas, sql, ensureSchema } from "@/lib/db";
 import { CATEGORIAS_ENTRADA, CATEGORIAS_SAIDA, brl, dataBR, hoje } from "@/lib/constants";
 import { intervaloMes, mesValido } from "@/lib/periodo";
 import { baixarConta, criarConta, estornarConta } from "@/app/(app)/financeiro/actions";
@@ -11,6 +11,7 @@ const SITUACOES = { abertas: "Em aberto", vencidas: "Vencidas", pagas: "Liquidad
 type Situacao = keyof typeof SITUACOES;
 
 export async function ContasPagina({ tipo, sp }: { tipo: "pagar" | "receber"; sp: { mes?: string; s?: string } }) {
+  await ensureSchema();
   const receber = tipo === "receber";
   const mes = mesValido(sp.mes);
   const s: Situacao = sp.s && sp.s in SITUACOES ? (sp.s as Situacao) : "abertas";

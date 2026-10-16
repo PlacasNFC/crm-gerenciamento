@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { sql } from "@/lib/db";
+import { sql, ensureSchema } from "@/lib/db";
 import { brl } from "@/lib/constants";
 import { ORIGENS } from "@/lib/fiscal";
 import { ActionForm } from "@/components/ActionForm";
@@ -16,6 +16,7 @@ type Produto = {
 type Mov = { id: number; data: Date; quantidade: string; motivo: string; venda_id: number | null; observacao: string | null };
 
 export default async function ProdutoForm({ params }: { params: Promise<{ id: string }> }) {
+  await ensureSchema();
   const { id } = await params;
   let p: Produto | undefined;
   let movs: Mov[] = [];

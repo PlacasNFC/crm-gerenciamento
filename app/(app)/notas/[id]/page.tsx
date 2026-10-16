@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { linhas, sql } from "@/lib/db";
+import { linhas, sql, ensureSchema } from "@/lib/db";
 import { brl } from "@/lib/constants";
 import { formatarDocumento } from "@/lib/fiscal";
 import { formatarChave, lerXmlNfe } from "@/lib/nfe";
@@ -18,6 +18,7 @@ type Nota = {
 };
 
 export default async function NotaPage({ params }: { params: Promise<{ id: string }> }) {
+  await ensureSchema();
   const { id } = await params;
   if (!/^\d+$/.test(id)) notFound();
   const [n] = await linhas<Nota>(sql`SELECT * FROM notas_fiscais WHERE id = ${Number(id)}`);

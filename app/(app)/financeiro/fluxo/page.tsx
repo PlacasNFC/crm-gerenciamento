@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { linhas, sql } from "@/lib/db";
+import { linhas, sql, ensureSchema } from "@/lib/db";
 import { brl, dataBR, hoje } from "@/lib/constants";
 import { intervaloMes, mesValido } from "@/lib/periodo";
 import { Cabecalho, Kpi, Vazio } from "@/components/ui";
@@ -9,6 +9,7 @@ export const dynamic = "force-dynamic";
 type Dia = { dia: string; recebido: string; pago: string; a_receber: string; a_pagar: string };
 
 export default async function Fluxo({ searchParams }: { searchParams: Promise<{ mes?: string }> }) {
+  await ensureSchema();
   const mes = mesValido((await searchParams).mes);
   const { ini, prox } = intervaloMes(mes);
   const dia = hoje();

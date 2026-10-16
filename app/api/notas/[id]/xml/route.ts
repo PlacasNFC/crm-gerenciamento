@@ -1,6 +1,7 @@
-import { linhas, sql } from "@/lib/db";
+import { linhas, sql, ensureSchema } from "@/lib/db";
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  await ensureSchema();
   const { id } = await params;
   if (!/^\d+$/.test(id)) return new Response("Não encontrado", { status: 404 });
   const cancel = new URL(req.url).searchParams.has("cancelamento");

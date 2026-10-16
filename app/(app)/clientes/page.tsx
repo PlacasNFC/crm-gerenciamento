@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { sql } from "@/lib/db";
+import { sql, ensureSchema } from "@/lib/db";
 import { formatarDocumento } from "@/lib/fiscal";
 import { BotaoLink, Cabecalho, Vazio } from "@/components/ui";
 
@@ -8,6 +8,7 @@ export const dynamic = "force-dynamic";
 type Linha = { id: number; nome: string; documento: string | null; email: string | null; telefone: string | null; municipio: string | null; uf: string | null; vendas: string };
 
 export default async function Clientes({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
+  await ensureSchema();
   const q = (await searchParams).q?.trim() ?? "";
   const like = `%${q}%`;
   const digitos = q.replace(/\D/g, "");

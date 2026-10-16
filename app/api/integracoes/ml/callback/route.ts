@@ -1,8 +1,10 @@
+import { ensureSchema } from "@/lib/db";
 import { timingSafeEqual } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { conectar } from "@/lib/ml";
 
 export async function GET(req: NextRequest) {
+  await ensureSchema();
   const code = req.nextUrl.searchParams.get("code");
   const state = req.nextUrl.searchParams.get("state") ?? "";
   const esperado = req.cookies.get("ml_state")?.value ?? "";

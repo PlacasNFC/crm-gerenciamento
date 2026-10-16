@@ -1,7 +1,8 @@
-import { sql } from "./db";
+import { ensureSchema, sql } from "./db";
 import type { ClienteOpcao, ProdutoOpcao } from "@/components/VendaForm";
 
 export async function opcoesVenda(incluirProdutos: number[] = []) {
+  await ensureSchema();
   const [produtos, clientes] = await Promise.all([
     sql`SELECT id, sku, nome, preco_venda FROM produtos WHERE ativo OR id = ANY(${incluirProdutos}::int[]) ORDER BY nome`,
     sql`SELECT id, nome FROM clientes ORDER BY nome`,

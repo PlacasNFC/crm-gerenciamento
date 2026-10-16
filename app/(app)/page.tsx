@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { linhas, sql } from "@/lib/db";
+import { linhas, sql, ensureSchema } from "@/lib/db";
 import { CANAIS, brl, hoje, mesAtual, type Canal } from "@/lib/constants";
 import { intervaloMes, mesValido } from "@/lib/periodo";
 import { Cabecalho, Kpi } from "@/components/ui";
@@ -9,6 +9,7 @@ export const dynamic = "force-dynamic";
 type PorCanal = { canal: Canal; pedidos: number; bruto: string; taxas: string; frete: string; custo: string };
 
 export default async function Inicio({ searchParams }: { searchParams: Promise<{ mes?: string }> }) {
+  await ensureSchema();
   const mes = mesValido((await searchParams).mes, mesAtual());
   const { ini, prox } = intervaloMes(mes);
   const dia = hoje();

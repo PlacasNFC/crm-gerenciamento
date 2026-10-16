@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { linhas, sql } from "@/lib/db";
+import { linhas, sql, ensureSchema } from "@/lib/db";
 import { ActionForm } from "@/components/ActionForm";
 import { Cabecalho, Campo } from "@/components/ui";
 import { excluirConta, salvarConta } from "../../actions";
@@ -10,6 +10,7 @@ export const dynamic = "force-dynamic";
 type Conta = { id: number; tipo: string; descricao: string; categoria: string; valor: string; vencimento: string; pago_em: string | null; venda_id: number | null };
 
 export default async function ContaPage({ params }: { params: Promise<{ id: string }> }) {
+  await ensureSchema();
   const { id } = await params;
   if (!/^\d+$/.test(id)) notFound();
   const [c] = await linhas<Conta>(sql`SELECT * FROM contas WHERE id = ${Number(id)}`);

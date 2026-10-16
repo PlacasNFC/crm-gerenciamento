@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { linhas, sql } from "@/lib/db";
+import { linhas, sql, ensureSchema } from "@/lib/db";
 import { CANAIS, STATUS_ENTREGA, dataBR, type Canal } from "@/lib/constants";
 import { ActionForm } from "@/components/ActionForm";
 import { Abas, Cabecalho, StatusBadge, Vazio } from "@/components/ui";
@@ -11,6 +11,7 @@ const FILTROS = { abertas: "Em aberto", entregue: "Entregues", todas: "Todas" } 
 type Linha = { id: number; data: string; canal: Canal; pedido_externo: string | null; cliente: string | null; produto: string; status_entrega: string; codigo_rastreio: string | null; dias: number };
 
 export default async function Entregas({ searchParams }: { searchParams: Promise<{ f?: string }> }) {
+  await ensureSchema();
   const raw = (await searchParams).f;
   const f: keyof typeof FILTROS = raw === "entregue" || raw === "todas" ? raw : "abertas";
   const rows = await linhas<Linha>(

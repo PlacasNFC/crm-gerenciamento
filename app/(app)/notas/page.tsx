@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { sql, linhas } from "@/lib/db";
+import { sql, linhas, ensureSchema } from "@/lib/db";
 import { brl } from "@/lib/constants";
 import { formatarDocumento } from "@/lib/fiscal";
 import { intervaloMes, mesValido } from "@/lib/periodo";
@@ -17,6 +17,7 @@ type Nota = {
 const ABAS = { emitidas: "Emitidas", recebidas: "Recebidas (compras)" } as const;
 
 export default async function Notas({ searchParams }: { searchParams: Promise<{ aba?: string; mes?: string }> }) {
+  await ensureSchema();
   const sp = await searchParams;
   const aba = sp.aba === "recebidas" ? "recebidas" : "emitidas";
   const mes = mesValido(sp.mes);

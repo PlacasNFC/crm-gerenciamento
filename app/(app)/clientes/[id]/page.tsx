@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { sql } from "@/lib/db";
+import { sql, ensureSchema } from "@/lib/db";
 import { formatarDocumento, UFS } from "@/lib/fiscal";
 import { ActionForm } from "@/components/ActionForm";
 import { Cabecalho, Campo } from "@/components/ui";
@@ -11,6 +11,7 @@ export const dynamic = "force-dynamic";
 type Cliente = Record<string, string | null> & { id: number; contribuinte: boolean };
 
 export default async function ClienteForm({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ voltar?: string }> }) {
+  await ensureSchema();
   const { id } = await params;
   const voltar = (await searchParams).voltar;
   let c: Cliente | undefined;

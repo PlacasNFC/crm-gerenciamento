@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { sql } from "@/lib/db";
+import { sql, ensureSchema } from "@/lib/db";
 import { CANAIS, brl, dataBR, type Canal } from "@/lib/constants";
 import { intervaloMes, mesValido } from "@/lib/periodo";
 import { BotaoLink, Cabecalho, StatusBadge, Tag, Vazio } from "@/components/ui";
@@ -12,6 +12,7 @@ type Linha = {
 };
 
 export default async function Vendas({ searchParams }: { searchParams: Promise<{ mes?: string; canal?: string; nf?: string; q?: string }> }) {
+  await ensureSchema();
   const sp = await searchParams;
   const mes = mesValido(sp.mes);
   const canal = sp.canal && sp.canal in CANAIS ? sp.canal : null;

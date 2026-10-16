@@ -1,4 +1,4 @@
-import { linhas, sql } from "@/lib/db";
+import { linhas, sql, ensureSchema } from "@/lib/db";
 import { mlConfigurado } from "@/lib/ml";
 import { ActionForm } from "@/components/ActionForm";
 import { Cabecalho, Campo, Tag } from "@/components/ui";
@@ -13,6 +13,7 @@ const ERROS: Record<string, string> = {
 };
 
 export default async function Integracoes({ searchParams }: { searchParams: Promise<{ erro?: string; conectado?: string }> }) {
+  await ensureSchema();
   const sp = await searchParams;
   const [ml] = await linhas<{ conta_id: string; conta_nome: string | null; ultima_sync: Date | null; ultimo_erro: string | null }>(
     sql`SELECT conta_id, conta_nome, ultima_sync, ultimo_erro FROM integracoes WHERE provedor = 'mercado_livre'`,

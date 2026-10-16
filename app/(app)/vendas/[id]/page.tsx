@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { linhas, sql } from "@/lib/db";
+import { linhas, sql, ensureSchema } from "@/lib/db";
 import { brl, dataBR, hoje } from "@/lib/constants";
 import { montarEmissao, type ClienteFiscal, type EmpresaFiscal, type ItemFiscal } from "@/lib/emissao";
 import { formatarDocumento } from "@/lib/fiscal";
@@ -21,6 +21,7 @@ type Nota = { id: number; numero: number; serie: number; chave: string; status: 
 type Conta = { id: number; valor: string; vencimento: string; pago_em: string | null };
 
 export default async function VendaPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ salvo?: string }> }) {
+  await ensureSchema();
   const { id: idStr } = await params;
   if (!/^\d+$/.test(idStr)) notFound();
   const id = Number(idStr);

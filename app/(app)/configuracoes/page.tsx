@@ -1,4 +1,4 @@
-import { sql } from "@/lib/db";
+import { sql, ensureSchema } from "@/lib/db";
 import { CANAIS, type Canal } from "@/lib/constants";
 import { formatarDocumento, UFS } from "@/lib/fiscal";
 import { ActionForm } from "@/components/ActionForm";
@@ -13,6 +13,7 @@ type Empresa = {
 };
 
 export default async function Configuracoes() {
+  await ensureSchema();
   const [e] = (await sql`SELECT * FROM empresa WHERE id = 1`) as Empresa[];
   return (
     <>
