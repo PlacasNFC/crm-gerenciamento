@@ -1,32 +1,16 @@
-import Link from "next/link";
+import { Sidebar } from "@/components/Sidebar";
+import { ensureSchema, sql } from "@/lib/db";
 import { logout } from "../login/actions";
 
-const links = [
-  { href: "/", label: "Resumo" },
-  { href: "/vendas", label: "Vendas" },
-  { href: "/entregas", label: "Entregas" },
-  { href: "/movimentacoes", label: "Entradas e saídas" },
-];
-
-export default function AppLayout({ children }: { children: React.ReactNode }) {
+export default async function AppLayout({ children }: { children: React.ReactNode }) {
+  await ensureSchema();
+  const [e] = (await sql`SELECT COALESCE(NULLIF(nome_fantasia, ''), NULLIF(razao_social, ''), 'Placas NFC') AS nome FROM empresa`) as { nome: string }[];
   return (
     <div className="min-h-screen">
-      <header className="border-b border-border bg-surface">
-        <div className="mx-auto max-w-6xl px-4 py-3 flex flex-wrap items-center gap-x-6 gap-y-2">
-          <span className="font-semibold">Placas NFC</span>
-          <nav className="flex flex-wrap gap-4 text-sm">
-            {links.map((l) => (
-              <Link key={l.href} href={l.href} className="text-muted hover:text-accent">
-                {l.label}
-              </Link>
-            ))}
-          </nav>
-          <form action={logout} className="ml-auto">
-            <button className="btn-ghost">Sair</button>
-          </form>
-        </div>
-      </header>
-      <main className="mx-auto max-w-6xl px-4 py-6 space-y-6">{children}</main>
+      <Sidebar empresa={e?.nome ?? "Placas NFC"} sair={logout} />
+      <main className="md:pl-56">
+        <div className="mx-auto max-w-6xl px-4 py-6 space-y-5">{children}</div>
+      </main>
     </div>
   );
 }
