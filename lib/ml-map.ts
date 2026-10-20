@@ -1,4 +1,5 @@
 // Conversão pura dos dados da API do Mercado Livre (sem acesso ao banco).
+import type { LinhaAnuncio } from "./itens";
 
 export type PedidoMl = {
   id: number;
@@ -8,7 +9,12 @@ export type PedidoMl = {
   total_amount: number;
   buyer?: { id: number; nickname?: string };
   shipping?: { id: number | null };
-  order_items: { item: { id: string; title: string }; quantity: number; unit_price: number; sale_fee: number | null }[];
+  order_items: {
+    item: { id: string; title: string; variation_id?: number | null };
+    quantity: number;
+    unit_price: number;
+    sale_fee: number | null;
+  }[];
 };
 
 // Mapeia o status do pedido do ML para o status de entrega do CRM. null = ainda não é venda (pagamento pendente).
@@ -41,4 +47,26 @@ export function vendaDoPedido(p: PedidoMl) {
     observacoes:
       [p.pack_id && `Pacote ${p.pack_id}`, p.shipping?.id && `Envio ${p.shipping.id}`].filter(Boolean).join(" · ") || null,
   };
+}
+
+// Linhas do pedido por anúncio/variação, para virar itens de produto pelos vínculos.
+export function linhasDoPedido(p: PedidoMl): LinhaAnuncio[] {
+  return p.order_items.map((i) => ({
+    anuncio_id: i.item.id,
+    variacao_id: i.item.variation_id ? String(i.item.variation_id) : "",
+    descricao: i.item.title,
+    quantidade: i.quantity,
+    valor: Math.round(i.unit_price * i.quantity * 100) / 100,
+  }));
+}
+
+// Envio Flex (self_service): o vendedor entrega e paga a transportadora; o custo vem da configuração do canal.
+export const ehFlex = (s: { logistic_type?: string; logistic?: { type?: string } }) =>
+  (s.logistic_type ?? s.logistic?.type) === "self_service";
+
+// Parte do custo do envio cobrada do vendedor (/shipments/{id}/costs → senders[].cost).
+export function freteDoVendedor(c: { senders?: { user_id?: number | string; cost?: number }[] }, contaId: string) {
+  const senders = c.senders ?? [];
+  const meus = senders.filter((s) => String(s.user_id) === contaId);
+  return Math.round((meus.length ? meus : senders).reduce((a, s) => a + (Number(s.cost) || 0), 0) * 100) / 100;
 }

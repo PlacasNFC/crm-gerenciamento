@@ -1,5 +1,5 @@
 import { sql, ensureSchema } from "@/lib/db";
-import { CATEGORIAS_ENTRADA, CATEGORIAS_SAIDA, brl, dataBR, hoje, mesAtual } from "@/lib/constants";
+import { CATEGORIAS_ENTRADA, CATEGORIAS_INSUMO, CATEGORIAS_SAIDA, brl, dataBR, hoje, mesAtual } from "@/lib/constants";
 import { MesFiltro, intervaloMes, mesValido } from "@/components/MesFiltro";
 import { ExcluirBotao } from "@/components/ExcluirBotao";
 import { Cabecalho, Kpi } from "@/components/ui";
@@ -15,28 +15,35 @@ export default async function Movimentacoes({ searchParams }: { searchParams: Pr
   const { ini, prox } = intervaloMes(mes);
   const [movsR, vendasR] = await Promise.all([
     sql`SELECT * FROM movimentacoes WHERE data >= ${ini} AND data < ${prox} ORDER BY data DESC, id DESC`,
-    sql`SELECT COALESCE(SUM(valor_bruto - taxa_plataforma - frete - custo_produto), 0)::float AS liquido FROM vendas
+    sql`SELECT COALESCE(SUM(valor_bruto - taxa_plataforma - (frete - reembolso_frete) - custo_produto), 0)::float AS liquido,
+          COALESCE(SUM(valor_bruto - taxa_plataforma - (frete - reembolso_frete)), 0)::float AS caixa FROM vendas
         WHERE data >= ${ini} AND data < ${prox} AND status_entrega NOT IN ('cancelado','devolvido')`,
   ]);
   const movs = movsR as Mov[];
-  const vendasLiq = (vendasR as { liquido: number }[])[0].liquido;
+  const { liquido: vendasLiq, caixa: vendasCaixa } = (vendasR as { liquido: number; caixa: number }[])[0];
   const entradas = movs.filter((m) => m.tipo === "entrada").reduce((a, m) => a + Number(m.valor), 0);
   const saidas = movs.filter((m) => m.tipo === "saida").reduce((a, m) => a + Number(m.valor), 0);
+  // compras de insumo já entram no resultado pelo custo dos produtos vendidos: ficam só no caixa
+  const insumos = movs
+    .filter((m) => m.tipo === "saida" && CATEGORIAS_INSUMO.includes(m.categoria))
+    .reduce((a, m) => a + Number(m.valor), 0);
+  const resultado = vendasLiq + entradas - (saidas - insumos);
+  const caixa = vendasCaixa + entradas - saidas;
 
   return (
     <>
       <Cabecalho
         titulo="Entradas e saídas"
-        sub="Gastos (material, embalagem, anúncios…) e entradas que não são vendas. As vendas entram sozinhas no resultado."
+        sub={`Gastos e entradas que não são vendas. As vendas entram sozinhas no resultado, já com o custo dos produtos; por isso as compras de insumo (${CATEGORIAS_INSUMO.join(", ")}) contam só no caixa.`}
       >
         <MesFiltro mes={mes} action="/movimentacoes" />
       </Cabecalho>
 
       <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Kpi titulo="Vendas (líquido)" valor={brl(vendasLiq)} sub="todas as lojas, após tarifas e frete" />
+        <Kpi titulo="Vendas (lucro)" valor={brl(vendasLiq)} sub="todas as lojas, após tarifas, frete e custo dos produtos" />
         <Kpi titulo="Outras entradas" valor={brl(entradas)} />
-        <Kpi titulo="Saídas" valor={brl(saidas)} />
-        <Kpi titulo="Resultado do mês" valor={brl(vendasLiq + entradas - saidas)} destaque={vendasLiq + entradas - saidas >= 0 ? "pos" : "neg"} />
+        <Kpi titulo="Saídas" valor={brl(saidas)} sub={insumos ? `${brl(insumos)} em insumos, fora do resultado` : undefined} />
+        <Kpi titulo="Resultado do mês" valor={brl(resultado)} destaque={resultado >= 0 ? "pos" : "neg"} sub={`caixa do mês ${brl(caixa)}`} />
       </section>
 
       <section className="card">
@@ -85,7 +92,12 @@ export default async function Movimentacoes({ searchParams }: { searchParams: Pr
               <tr key={m.id}>
                 <td className="whitespace-nowrap">{dataBR(m.data)}</td>
                 <td>{m.tipo === "entrada" ? "Entrada" : "Saída"}</td>
-                <td>{m.categoria}</td>
+                <td className="whitespace-nowrap">
+                  {m.categoria}
+                  {m.tipo === "saida" && CATEGORIAS_INSUMO.includes(m.categoria) && (
+                    <span className="badge bg-surface-2 text-muted ml-1" title="Fora do resultado do mês (só caixa)">insumo</span>
+                  )}
+                </td>
                 <td className="max-w-0 w-full"><span className="block truncate" title={m.descricao ?? ""}>{m.descricao ?? "—"}</span></td>
                 <td className={`text-right whitespace-nowrap ${m.tipo === "saida" ? "text-neg" : "text-pos"}`}>
                   {m.tipo === "saida" ? "−" : "+"}{brl(m.valor)}

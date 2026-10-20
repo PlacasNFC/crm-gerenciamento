@@ -26,15 +26,15 @@ export default async function Painel({ searchParams }: { searchParams: Promise<{
   const ini = somaDias(fim, -(n - 1));
   const iniAnt = somaDias(ini, -n);
 
-  const [diasR, antR, cancR, topR, pendR, mlR] = await Promise.all([
+  const [diasR, antR, cancR, topR, pendR, mlR, semProdR] = await Promise.all([
     sql`WITH dias AS (SELECT generate_series(${ini}::date, ${fim}::date, interval '1 day')::date AS d)
         SELECT to_char(d, 'YYYY-MM-DD') AS dia, COUNT(v.id)::int AS pedidos, COALESCE(SUM(v.quantidade), 0)::int AS unidades,
           COALESCE(SUM(v.valor_bruto), 0)::float AS bruto, COALESCE(SUM(v.taxa_plataforma), 0)::float AS taxas,
-          COALESCE(SUM(v.frete), 0)::float AS frete
+          COALESCE(SUM(v.frete - v.reembolso_frete), 0)::float AS frete
         FROM dias LEFT JOIN vendas v ON v.data = dias.d AND v.canal = ${CANAL} AND v.status_entrega NOT IN ('cancelado','devolvido')
         GROUP BY d ORDER BY d`,
     sql`SELECT COUNT(*)::int AS pedidos, COALESCE(SUM(valor_bruto), 0)::float AS bruto,
-          COALESCE(SUM(valor_bruto - taxa_plataforma - frete), 0)::float AS liquido
+          COALESCE(SUM(valor_bruto - taxa_plataforma - (frete - reembolso_frete)), 0)::float AS liquido
         FROM vendas WHERE canal = ${CANAL} AND data >= ${iniAnt} AND data < ${ini} AND status_entrega NOT IN ('cancelado','devolvido')`,
     sql`SELECT COUNT(*)::int AS n FROM vendas WHERE canal = ${CANAL} AND data >= ${ini} AND status_entrega IN ('cancelado','devolvido')`,
     sql`SELECT produto, SUM(quantidade)::int AS unidades, COUNT(*)::int AS pedidos, SUM(valor_bruto)::float AS bruto
@@ -43,7 +43,10 @@ export default async function Painel({ searchParams }: { searchParams: Promise<{
     sql`SELECT status_entrega, COUNT(*)::int AS n, MIN(data)::text AS mais_antiga FROM vendas
         WHERE status_entrega IN ('a_enviar','enviado') GROUP BY status_entrega`,
     sql`SELECT conta_nome, ultima_sync, ultimo_erro FROM integracoes WHERE provedor = ${CANAL}`,
+    sql`SELECT COUNT(DISTINCT v.id)::int AS n FROM vendas v JOIN venda_itens i ON i.venda_id = v.id
+        WHERE v.data >= ${ini} AND v.status_entrega NOT IN ('cancelado','devolvido') AND i.produto_id IS NULL AND i.anuncio_id IS NOT NULL`,
   ]);
+  const semProduto = (semProdR as { n: number }[])[0].n;
   const dias = diasR as Dia[];
   const ant = (antR as { pedidos: number; bruto: number; liquido: number }[])[0];
   const cancelados = (cancR as { n: number }[])[0].n;
@@ -105,6 +108,13 @@ export default async function Painel({ searchParams }: { searchParams: Promise<{
       {ml?.ultimo_erro && (
         <p className="card border-red-300 text-sm text-neg">
           Última importação do Mercado Livre falhou: {ml.ultimo_erro} · <Link href="/integracoes" className="underline">ver integração</Link>
+        </p>
+      )}
+
+      {semProduto > 0 && (
+        <p className="card text-sm">
+          {semProduto} venda{semProduto === 1 ? "" : "s"} do período com anúncio sem produto vinculado (custo zerado).{" "}
+          <Link href="/produtos/anuncios" className="text-accent hover:underline">Vincular anúncios →</Link>
         </p>
       )}
 

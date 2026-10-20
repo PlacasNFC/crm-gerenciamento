@@ -88,6 +88,71 @@ export function ensureSchema() {
     )`,
     sql`CREATE INDEX IF NOT EXISTS kanban_colunas_board_idx ON kanban_colunas (board_id, posicao)`,
     sql`CREATE INDEX IF NOT EXISTS kanban_cards_coluna_idx ON kanban_cards (coluna_id, posicao)`,
+    // frete efetivo da venda = frete − reembolso_frete (ex.: reembolso do ML no Flex)
+    sql`ALTER TABLE vendas ADD COLUMN IF NOT EXISTS reembolso_frete NUMERIC(12,2) NOT NULL DEFAULT 0`,
+    sql`ALTER TABLE vendas ADD COLUMN IF NOT EXISTS frete_pendente BOOLEAN NOT NULL DEFAULT false`,
+    sql`CREATE TABLE IF NOT EXISTS insumos (
+      id SERIAL PRIMARY KEY,
+      nome TEXT NOT NULL,
+      unidade TEXT NOT NULL DEFAULT 'un',
+      custo_unitario NUMERIC(12,4) NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )`,
+    // custo do produto = custo_extra + Σ (quantidade × custo do insumo)
+    sql`CREATE TABLE IF NOT EXISTS produtos (
+      id SERIAL PRIMARY KEY,
+      nome TEXT NOT NULL,
+      sku TEXT,
+      custo_extra NUMERIC(12,2) NOT NULL DEFAULT 0,
+      ativo BOOLEAN NOT NULL DEFAULT true,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )`,
+    sql`CREATE TABLE IF NOT EXISTS produto_insumos (
+      produto_id INTEGER NOT NULL REFERENCES produtos(id) ON DELETE CASCADE,
+      insumo_id INTEGER NOT NULL REFERENCES insumos(id) ON DELETE CASCADE,
+      quantidade NUMERIC(12,4) NOT NULL,
+      PRIMARY KEY (produto_id, insumo_id)
+    )`,
+    sql`CREATE TABLE IF NOT EXISTS produto_precos (
+      produto_id INTEGER NOT NULL REFERENCES produtos(id) ON DELETE CASCADE,
+      canal TEXT NOT NULL,
+      preco NUMERIC(12,2) NOT NULL,
+      PRIMARY KEY (produto_id, canal)
+    )`,
+    // estimativas para a margem planejada e o formulário de venda; custo_flex = custo por pedido no Mercado Envios Flex
+    sql`CREATE TABLE IF NOT EXISTS canais_config (
+      canal TEXT PRIMARY KEY,
+      taxa_pct NUMERIC(6,2) NOT NULL DEFAULT 0,
+      taxa_fixa NUMERIC(12,2) NOT NULL DEFAULT 0,
+      frete_estimado NUMERIC(12,2) NOT NULL DEFAULT 0,
+      custo_flex NUMERIC(12,2) NOT NULL DEFAULT 0
+    )`,
+    sql`INSERT INTO canais_config (canal, custo_flex) VALUES ('mercado_livre', 12.95) ON CONFLICT DO NOTHING`,
+    // anúncio (e variação) do marketplace → produto(s); quantidade > 1 = kit, várias linhas = combo
+    sql`CREATE TABLE IF NOT EXISTS anuncio_vinculos (
+      id SERIAL PRIMARY KEY,
+      canal TEXT NOT NULL,
+      anuncio_id TEXT NOT NULL,
+      variacao_id TEXT NOT NULL DEFAULT '',
+      produto_id INTEGER NOT NULL REFERENCES produtos(id) ON DELETE CASCADE,
+      quantidade INTEGER NOT NULL DEFAULT 1,
+      UNIQUE (canal, anuncio_id, variacao_id, produto_id)
+    )`,
+    // itens da venda; custo_unitario fica congelado no momento da venda (custo_manual = editado à mão)
+    sql`CREATE TABLE IF NOT EXISTS venda_itens (
+      id SERIAL PRIMARY KEY,
+      venda_id INTEGER NOT NULL REFERENCES vendas(id) ON DELETE CASCADE,
+      produto_id INTEGER REFERENCES produtos(id),
+      anuncio_id TEXT,
+      variacao_id TEXT NOT NULL DEFAULT '',
+      descricao TEXT NOT NULL,
+      quantidade INTEGER NOT NULL DEFAULT 1,
+      valor NUMERIC(12,2) NOT NULL DEFAULT 0,
+      custo_unitario NUMERIC(12,4) NOT NULL DEFAULT 0,
+      custo_manual BOOLEAN NOT NULL DEFAULT false
+    )`,
+    sql`CREATE INDEX IF NOT EXISTS venda_itens_venda_idx ON venda_itens (venda_id)`,
+    sql`CREATE INDEX IF NOT EXISTS venda_itens_produto_idx ON venda_itens (produto_id)`,
     sql`CREATE INDEX IF NOT EXISTS vendas_data_idx ON vendas (data)`,
     sql`CREATE INDEX IF NOT EXISTS vendas_pedido_idx ON vendas (canal, pedido_externo)`,
     sql`CREATE INDEX IF NOT EXISTS movimentacoes_data_idx ON movimentacoes (data)`,
