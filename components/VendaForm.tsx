@@ -1,12 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { CANAIS, STATUS_ENTREGA, brl, hoje, pct, r2, type Canal } from "@/lib/constants";
+import { CANAIS, STATUS_ENTREGA, brl, dataISO, hoje, pct, r2, type Canal } from "@/lib/constants";
 import { taxaEstimada, type CanalConfig, type ItemVenda, type ProdutoOpcao } from "@/lib/itens";
 
 export type Venda = {
   id: number;
-  data: string;
+  data: string | Date;
   canal: string;
   pedido_externo: string | null;
   cliente: string | null;
@@ -136,7 +136,7 @@ export function VendaForm({
       <input type="hidden" name="itens" value={json} />
       <label className="field">
         <span>Data</span>
-        <input type="date" name="data" defaultValue={venda?.data?.slice(0, 10) ?? hoje()} required />
+        <input type="date" name="data" defaultValue={venda ? dataISO(venda.data) : hoje()} required />
       </label>
       <label className="field">
         <span>Canal</span>
