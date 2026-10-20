@@ -1,31 +1,21 @@
 @import "tailwindcss";
 
 :root {
-  --bg: #f4f5f7;
+  --bg: #f6f7f9;
   --surface: #ffffff;
-  --fg: #1b1f24;
-  --muted: #667085;
-  --border: #e3e6ea;
-  --accent: #0f6e6a;
-  --accent-fg: #ffffff;
-  --side: #17323a;
-  --side-fg: #e9f1f2;
-  --pos: #12804a;
-  --neg: #c4321d;
+  --fg: #16181d;
+  --muted: #6b7280;
+  --border: #e5e7eb;
+  --accent: #2563eb;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0e1113;
-    --surface: #161a1d;
-    --fg: #e6e9ec;
-    --muted: #98a2ad;
-    --border: #2a3035;
-    --accent: #2fb3aa;
-    --accent-fg: #06201f;
-    --side: #0b1a1e;
-    --side-fg: #dbe7e8;
-    --pos: #4cc489;
-    --neg: #f07a66;
+    --bg: #0d0f12;
+    --surface: #16191e;
+    --fg: #e8eaed;
+    --muted: #9aa0a6;
+    --border: #2a2e35;
+    --accent: #5b8def;
   }
 }
 
@@ -34,8 +24,6 @@
   --color-accent: var(--accent);
   --color-surface: var(--surface);
   --color-border: var(--border);
-  --color-pos: var(--pos);
-  --color-neg: var(--neg);
 }
 
 body {
@@ -45,44 +33,34 @@ body {
 }
 
 @layer components {
-  .sidebar {
-    @apply md:fixed md:inset-y-0 md:left-0 md:w-56 md:flex md:flex-col;
-    background: var(--side);
-    color: var(--side-fg);
+  .card {
+    @apply rounded-xl border border-border bg-surface p-4 sm:p-5;
   }
-  .card { @apply rounded-lg border border-border bg-surface p-4; }
-  .field { @apply flex flex-col gap-1 text-sm min-w-0; }
-  .field > span { @apply text-xs text-muted; }
-  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea {
-    @apply w-full rounded-md border border-border bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-accent;
+  .field {
+    @apply flex flex-col gap-1 text-sm;
   }
-  input:disabled, select:disabled, textarea:disabled { @apply opacity-60; }
+  .field > span {
+    @apply text-muted;
+  }
+  input, select, textarea {
+    @apply rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-accent;
+  }
   .btn {
-    @apply inline-flex items-center justify-center gap-1 rounded-md px-3.5 py-1.5 text-sm font-medium cursor-pointer hover:opacity-90 disabled:opacity-50 whitespace-nowrap;
-    background: var(--accent);
-    color: var(--accent-fg);
+    @apply inline-flex items-center justify-center rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50 cursor-pointer;
   }
   .btn-ghost {
-    @apply inline-flex items-center justify-center rounded-md border border-border bg-surface px-3 py-1.5 text-sm cursor-pointer hover:border-accent whitespace-nowrap;
+    @apply inline-flex items-center justify-center rounded-lg border border-border px-3 py-1.5 text-sm hover:bg-black/5 cursor-pointer;
   }
-  .btn-link { @apply text-xs text-accent hover:underline cursor-pointer; }
-  .btn-perigo { @apply text-xs text-neg hover:underline cursor-pointer; }
-  .tbl-wrap { @apply rounded-lg border border-border bg-surface overflow-x-auto; }
-  .tbl { @apply w-full text-sm; }
-  .tbl th { @apply text-left text-xs font-medium text-muted border-b border-border px-3 py-2 whitespace-nowrap; }
-  .tbl td { @apply border-b border-border px-3 py-2 align-middle; }
-  .tbl tr:last-child td { @apply border-b-0; }
-  .tbl .num { @apply text-right whitespace-nowrap tabular-nums; }
-  .aba { @apply px-3 py-2 text-sm text-muted -mb-px border-b-2 border-transparent hover:text-accent; }
-  .aba-ativa { @apply text-accent font-medium; border-color: var(--accent); }
-  .tag { @apply inline-block rounded px-1.5 py-0.5 text-[11px] font-medium whitespace-nowrap; }
-  .tag-amarela { @apply bg-amber-100 text-amber-800; }
-  .tag-azul { @apply bg-sky-100 text-sky-800; }
-  .tag-verde { @apply bg-emerald-100 text-emerald-800; }
-  .tag-vermelha { @apply bg-red-100 text-red-800; }
-  .tag-cinza { @apply bg-gray-200 text-gray-700; }
-  .msg-erro { @apply mt-2 text-sm text-neg; }
-  .msg-ok { @apply mt-2 text-sm text-pos; }
-  .grid-form { @apply grid gap-3 sm:grid-cols-2 lg:grid-cols-4; }
-  .secao { @apply text-sm font-semibold mb-3; }
+  .tbl {
+    @apply w-full text-sm;
+  }
+  .tbl th {
+    @apply text-left font-medium text-muted border-b border-border px-2 py-2 whitespace-nowrap;
+  }
+  .tbl td {
+    @apply border-b border-border px-2 py-2 align-middle;
+  }
+  .badge {
+    @apply inline-block rounded-full px-2 py-0.5 text-xs font-medium;
+  }
 }
