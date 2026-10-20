@@ -36,7 +36,15 @@ export function ensureSchema() {
       valor NUMERIC(12,2) NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )`,
+    sql`CREATE TABLE IF NOT EXISTS integracoes (
+      provedor TEXT PRIMARY KEY,
+      conta_id TEXT, conta_nome TEXT,
+      access_token TEXT, refresh_token TEXT, expira_em TIMESTAMPTZ,
+      ultima_sync TIMESTAMPTZ, ultimo_erro TEXT,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )`,
     sql`CREATE INDEX IF NOT EXISTS vendas_data_idx ON vendas (data)`,
+    sql`CREATE INDEX IF NOT EXISTS vendas_pedido_idx ON vendas (canal, pedido_externo)`,
     sql`CREATE INDEX IF NOT EXISTS movimentacoes_data_idx ON movimentacoes (data)`,
   ]).catch((e) => {
     schemaReady = null;

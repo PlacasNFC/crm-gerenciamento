@@ -11,6 +11,7 @@ CRM simples para controlar vendas (Mercado Livre, Shopee, TikTok Shop, direto), 
 - **Vendas** — cadastro/edição de pedidos com taxas, frete e custo
 - **Entregas** — pedidos em aberto, status e código de rastreio
 - **Entradas e saídas** — despesas e receitas fora dos marketplaces
+- **Integrações** — conexão com o Mercado Livre e importação de pedidos
 
 ## Rodar local
 ```bash
@@ -25,6 +26,15 @@ npm run dev
 | `DATABASE_URL` | Postgres (criada pela integração Neon) |
 | `AUTH_SECRET` | segredo do JWT (≥ 32 caracteres) |
 | `ADMIN_USER` / `ADMIN_PASSWORD` | credenciais de acesso |
+| `ML_CLIENT_ID` / `ML_CLIENT_SECRET` | app do Mercado Livre (opcional) |
+| `CRON_SECRET` | protege a importação diária do Mercado Livre (Vercel Cron) |
+
+## Mercado Livre
+No app em developers.mercadolivre.com.br (escopos de leitura, pedidos e `offline_access`):
+- **Redirect URI:** `https://placas-nfc-crm.vercel.app/api/integracoes/ml/callback`
+- **Notificações** (tópicos Orders e Shipments): `https://placas-nfc-crm.vercel.app/api/integracoes/ml/notificacoes`
+
+Depois, em **Integrações**, clique em *Conectar conta do Mercado Livre*. Os pedidos pagos viram vendas (uma por pedido); a importação roda todo dia às 7h (Vercel Cron), a cada notificação do ML e pelo botão *Importar pedidos agora*.
 
 Para trocar a senha: `vercel env rm ADMIN_PASSWORD production` → `vercel env add ADMIN_PASSWORD production` → redeploy.
 

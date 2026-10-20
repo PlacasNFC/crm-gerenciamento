@@ -6,6 +6,7 @@ const links = [
   { href: "/vendas", label: "Vendas" },
   { href: "/entregas", label: "Entregas" },
   { href: "/movimentacoes", label: "Entradas e saídas" },
+  { href: "/integracoes", label: "Integrações" },
 ];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {

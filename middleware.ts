@@ -11,6 +11,6 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  // Tudo é protegido, exceto login e assets estáticos.
-  matcher: ["/((?!login|_next/static|_next/image|favicon.ico).*)"],
+  // Tudo é protegido, exceto login, assets, o cron (valida CRON_SECRET) e as notificações do ML.
+  matcher: ["/((?!login|api/cron|api/integracoes/ml/notificacoes|_next/static|_next/image|favicon.ico).*)"],
 };
