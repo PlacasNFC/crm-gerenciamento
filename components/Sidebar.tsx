@@ -13,7 +13,6 @@ const GRUPOS: { titulo: string; itens: Item[] }[] = [
     itens: [
       { href: "/", label: "Painel", icone: "painel" },
       { href: "/vendas", label: "Vendas", icone: "vendas" },
-      { href: "/produtos", label: "Produtos e custos", icone: "produtos" },
       { href: "/entregas", label: "Entregas", icone: "entregas" },
       { href: "/movimentacoes", label: "Entradas e saídas", icone: "dinheiro" },
     ],

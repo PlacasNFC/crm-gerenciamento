@@ -24,10 +24,7 @@ export const CATEGORIAS_SAIDA = [
   "Outros",
 ];
 
-// Compras de insumo: o custo já entra no resultado pelas vendas (custo do produto), então ficam só no caixa.
-export const CATEGORIAS_INSUMO = ["Matéria-prima / NFC", "Embalagem"];
-
-export const CATEGORIAS_ENTRADA =["Venda avulsa", "Aporte", "Reembolso", "Outros"];
+export const CATEGORIAS_ENTRADA = ["Venda avulsa", "Aporte", "Reembolso", "Outros"];
 
 export type Canal = keyof typeof CANAIS;
 export type StatusEntrega = keyof typeof STATUS_ENTREGA;
@@ -35,17 +32,7 @@ export type StatusEntrega = keyof typeof STATUS_ENTREGA;
 export const brl = (v: number | string) =>
   Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
-export const r2 = (v: number) => Math.round(v * 100) / 100;
-
-export const pct = (parte: number, todo: number) => (todo ? ((parte / todo) * 100).toFixed(1) + "%" : "—");
-
-// "YYYY-MM-DD" de uma coluna DATE (o driver pode devolver string ou Date à meia-noite local)
-export const dataISO = (d: string | Date) =>
-  typeof d === "string"
-    ? d.slice(0, 10)
-    : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-
-export const dataBR =(d: string | Date) =>
+export const dataBR = (d: string | Date) =>
   new Date(typeof d === "string" ? d.slice(0, 10) + "T12:00:00" : d).toLocaleDateString("pt-BR");
 
 // "YYYY-MM" do mês corrente no fuso de São Paulo
