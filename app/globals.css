@@ -15,6 +15,8 @@
   --ml-fg: #2d3277;
   --sidebar: #11131a;
   --sidebar-fg: #c9ccd6;
+  --scroll-thumb: #c5cbd6;
+  --scroll-thumb-hover: #98a2b3;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -30,6 +32,8 @@
     --neg: #f97066;
     --sidebar: #0a0b0f;
     --sidebar-fg: #b4b9c6;
+    --scroll-thumb: #363c48;
+    --scroll-thumb-hover: #4d5565;
   }
 }
 
@@ -49,6 +53,41 @@ body {
   background: var(--bg);
   color: var(--fg);
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+/* Barras de rolagem finas, no tom do CRM (kanban, tabelas, menu) */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--scroll-thumb);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scroll-thumb-hover);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+/* Firefox (no Chrome, scrollbar-color desligaria o estilo acima) */
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scroll-thumb) transparent;
+  }
+}
+aside ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border: 3px solid transparent;
+  background-clip: padding-box;
 }
 
 @layer components {
