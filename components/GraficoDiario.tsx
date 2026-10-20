@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-export type Dia = { dia: string; pedidos: number; unidades: number; bruto: number; taxas: number; frete: number };
+export type Dia = { dia: string; pedidos: number; unidades: number; pecas: number; bruto: number; taxas: number; frete: number };
 
 const brl = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const brlCurto = (v: number) =>
@@ -17,6 +17,7 @@ const METRICAS = {
   bruto: "Faturamento",
   liquido: "Líquido",
   pedidos: "Pedidos",
+  pecas: "Peças",
 } as const;
 type Metrica = keyof typeof METRICAS;
 
@@ -32,9 +33,11 @@ export function GraficoDiario({ dias }: { dias: Dia[] }) {
   const [metrica, setMetrica] = useState<Metrica>("bruto");
   const [foco, setFoco] = useState<number | null>(null);
 
-  const valor = (d: Dia) => (metrica === "pedidos" ? d.pedidos : metrica === "liquido" ? d.bruto - d.taxas - d.frete : d.bruto);
+  const valor = (d: Dia) =>
+    metrica === "pedidos" ? d.pedidos : metrica === "pecas" ? d.pecas : metrica === "liquido" ? d.bruto - d.taxas - d.frete : d.bruto;
+  const contagem = metrica === "pedidos" || metrica === "pecas";
   const max = teto(Math.max(...dias.map(valor), 0));
-  const fmt = metrica === "pedidos" ? (v: number) => String(Math.round(v)) : brlCurto;
+  const fmt = contagem ? (v: number) => String(Math.round(v)) : brlCurto;
   const passo = Math.ceil(dias.length / 10); // no máximo ~10 rótulos no eixo X
   const d = foco != null ? dias[foco] : null;
 
@@ -53,7 +56,7 @@ export function GraficoDiario({ dias }: { dias: Dia[] }) {
             <>
               <p className="font-medium text-fg">{rotulo(d.dia)}</p>
               <p>
-                {d.pedidos} pedido{d.pedidos === 1 ? "" : "s"} · {brl(d.bruto)} bruto · {brl(d.bruto - d.taxas - d.frete)} líquido
+                {d.pedidos} pedido{d.pedidos === 1 ? "" : "s"} · {d.pecas} peça{d.pecas === 1 ? "" : "s"} · {brl(d.bruto)} bruto · {brl(d.bruto - d.taxas - d.frete)} líquido
               </p>
             </>
           ) : (
@@ -93,7 +96,7 @@ export function GraficoDiario({ dias }: { dias: Dia[] }) {
                   onMouseEnter={() => setFoco(i)}
                   onFocus={() => setFoco(i)}
                   onClick={() => setFoco(i)}
-                  aria-label={`${rotulo(dia.dia)}: ${metrica === "pedidos" ? v : brl(v)}`}
+                  aria-label={`${rotulo(dia.dia)}: ${contagem ? v : brl(v)}`}
                 >
                   <span className={`absolute inset-0 rounded-sm ${ativo ? "bg-accent/5" : ""}`} />
                   {metrica === "bruto" ? (
@@ -134,12 +137,20 @@ export function GraficoDiario({ dias }: { dias: Dia[] }) {
 }
 
 // Barras horizontais simples (ex.: média por dia da semana).
-export function BarrasHorizontais({ itens, formato = "brl" }: { itens: { rotulo: string; valor: number; sub?: string }[]; formato?: "brl" | "num" }) {
+export function BarrasHorizontais({
+  itens,
+  formato = "brl",
+  larguraRotulo = "2.5rem",
+}: {
+  itens: { rotulo: string; valor: number; sub?: string }[];
+  formato?: "brl" | "num";
+  larguraRotulo?: string;
+}) {
   const max = Math.max(...itens.map((i) => i.valor), 0) || 1;
   return (
     <ul className="space-y-2.5">
       {itens.map((i) => (
-        <li key={i.rotulo} className="grid grid-cols-[2.5rem_1fr_auto] items-center gap-3 text-sm">
+        <li key={i.rotulo} className="grid items-center gap-3 text-sm" style={{ gridTemplateColumns: `${larguraRotulo} 1fr auto` }}>
           <span className="text-muted">{i.rotulo}</span>
           <span className="h-2 overflow-hidden rounded-full bg-surface-2">
             <span className="block h-full rounded-full bg-accent" style={{ width: `${(i.valor / max) * 100}%` }} />

@@ -35,7 +35,7 @@ const dataCurta = (d: string) => new Date(d + "T12:00:00").toLocaleDateString("p
 const iniciais = (n: string) =>
   n.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]!.toUpperCase()).join("");
 
-function SeletorCor({ nome, valor, vazio }: { nome: string; valor: Cor | null; vazio?: boolean }) {
+export function SeletorCor({ nome, valor, vazio }: { nome: string; valor: Cor | null; vazio?: boolean }) {
   return (
     <div className="flex flex-wrap gap-1.5">
       {vazio && (
@@ -56,7 +56,7 @@ function SeletorCor({ nome, valor, vazio }: { nome: string; valor: Cor | null; v
   );
 }
 
-function Modal({ aberto, fechar, titulo, children }: { aberto: boolean; fechar: () => void; titulo: string; children: React.ReactNode }) {
+export function Modal({ aberto, fechar, titulo, children }: { aberto: boolean; fechar: () => void; titulo: string; children: React.ReactNode }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const d = ref.current;

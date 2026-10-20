@@ -42,3 +42,17 @@ export function vendaDoPedido(p: PedidoMl) {
       [p.pack_id && `Pacote ${p.pack_id}`, p.shipping?.id && `Envio ${p.shipping.id}`].filter(Boolean).join(" · ") || null,
   };
 }
+
+export type EnvioMl = {
+  status?: string;
+  tracking_number?: string | null;
+  receiver_address?: { state?: { id?: string | null; name?: string | null } | null; city?: { name?: string | null } | null } | null;
+};
+
+// Estado (UF) e cidade do destinatário. O ML manda o estado como "BR-SP".
+export function regiaoDoEnvio(s: EnvioMl): { uf: string | null; cidade: string | null } {
+  const id = s.receiver_address?.state?.id ?? "";
+  const uf = /^BR-([A-Z]{2})$/.exec(id)?.[1] ?? null;
+  const cidade = s.receiver_address?.city?.name?.trim() || null;
+  return { uf, cidade };
+}

@@ -7,19 +7,21 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { ExcluirBotao } from "@/components/ExcluirBotao";
 import { Cabecalho, Truncado } from "@/components/ui";
 import { Icone } from "@/components/Icone";
+import { ESTADOS } from "@/lib/regioes";
 import { criarVenda, excluirVenda } from "../actions";
 
 export const dynamic = "force-dynamic";
 
-export default async function Vendas({ searchParams }: { searchParams: Promise<{ mes?: string; canal?: string }> }) {
+export default async function Vendas({ searchParams }: { searchParams: Promise<{ mes?: string; canal?: string; uf?: string }> }) {
   await ensureSchema();
   const sp = await searchParams;
   const mes = mesValido(sp.mes, mesAtual());
   const canal = sp.canal && sp.canal in CANAIS ? sp.canal : null;
+  const uf = sp.uf && sp.uf in ESTADOS ? sp.uf : null;
   const { ini, prox } = intervaloMes(mes);
 
   const vendas = (await sql`SELECT * FROM vendas
-    WHERE data >= ${ini} AND data < ${prox} AND (${canal}::text IS NULL OR canal = ${canal})
+    WHERE data >= ${ini} AND data < ${prox} AND (${canal}::text IS NULL OR canal = ${canal}) AND (${uf}::text IS NULL OR uf = ${uf})
     ORDER BY data DESC, id DESC`) as Venda[];
 
   const ativas = vendas.filter((v) => v.status_entrega !== "cancelado" && v.status_entrega !== "devolvido");
@@ -28,7 +30,9 @@ export default async function Vendas({ searchParams }: { searchParams: Promise<{
 
   return (
     <>
-      <Cabecalho titulo="Vendas" sub="Pedidos do Mercado Livre entram sozinhos. Lance aqui as vendas dos outros canais." />
+      <Cabecalho titulo="Vendas" sub="Pedidos do Mercado Livre entram sozinhos. Lance aqui as vendas dos outros canais.">
+        <Link href="/vendas/pecas" className="btn-ghost">Peças por anúncio</Link>
+      </Cabecalho>
 
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Resumo titulo="Vendas no mês" valor={String(ativas.length)} />
@@ -62,13 +66,20 @@ export default async function Vendas({ searchParams }: { searchParams: Promise<{
                 {Object.entries(CANAIS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </select>
             </label>
+            <label className="field">
+              <span>Estado</span>
+              <select name="uf" defaultValue={uf ?? ""}>
+                <option value="">Todos</option>
+                {Object.keys(ESTADOS).map((k) => <option key={k} value={k}>{k}</option>)}
+              </select>
+            </label>
             <button className="btn-ghost">Filtrar</button>
           </form>
         </div>
         <table className="tbl">
           <thead>
             <tr>
-              <th>Data</th><th>Canal</th><th>Pedido</th><th>Produto</th><th>Cliente</th><th className="text-right">Valor</th><th className="text-right">Líquido</th><th>Entrega</th><th></th>
+              <th>Data</th><th>Canal</th><th>Pedido</th><th>Produto</th><th>Cliente</th><th>Local</th><th className="text-right">Valor</th><th className="text-right">Líquido</th><th>Entrega</th><th></th>
             </tr>
           </thead>
           <tbody>
@@ -86,6 +97,16 @@ export default async function Vendas({ searchParams }: { searchParams: Promise<{
                     </span>
                   </td>
                   <td><Truncado texto={v.cliente} className="block max-w-[10rem] truncate" /></td>
+                  <td className="whitespace-nowrap text-xs">
+                    {v.uf ? (
+                      <span title={[v.cidade, ESTADOS[v.uf]].filter(Boolean).join(" · ")}>
+                        <b>{v.uf}</b>
+                        {v.cidade && <span className="block max-w-[8rem] truncate text-muted">{v.cidade}</span>}
+                      </span>
+                    ) : (
+                      <span className="text-muted">—</span>
+                    )}
+                  </td>
                   <td className="whitespace-nowrap text-right tabular-nums">{brl(v.valor_bruto)}</td>
                   <td className="whitespace-nowrap text-right tabular-nums">{brl(liquido)}</td>
                   <td><StatusBadge status={v.status_entrega as StatusEntrega} /></td>
@@ -97,7 +118,7 @@ export default async function Vendas({ searchParams }: { searchParams: Promise<{
               );
             })}
             {vendas.length === 0 && (
-              <tr><td colSpan={9} className="text-center text-muted py-6">Nenhuma venda neste filtro.</td></tr>
+              <tr><td colSpan={10} className="text-center text-muted py-6">Nenhuma venda neste filtro.</td></tr>
             )}
           </tbody>
         </table>

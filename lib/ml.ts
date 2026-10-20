@@ -1,7 +1,7 @@
 // Integração Mercado Livre: OAuth 2.0 + importação de pedidos (cron diário, botão manual e notificações).
 // Access token dura 6h; o refresh token é de uso único (cada refresh devolve um novo).
 import { sql } from "./db";
-import { statusDoEnvio, statusDoPedido, vendaDoPedido, type PedidoMl } from "./ml-map";
+import { regiaoDoEnvio, statusDoEnvio, statusDoPedido, vendaDoPedido, type EnvioMl, type PedidoMl } from "./ml-map";
 
 const API = "https://api.mercadolibre.com";
 const AUTH = "https://auth.mercadolivre.com.br/authorization";
@@ -107,14 +107,37 @@ async function importarPedido(p: PedidoMl): Promise<"novo" | "atualizado" | null
   return (ins as unknown[]).length ? "novo" : null;
 }
 
-// Atualiza a entrega pelo status do envio. Devolve true se mudou algo.
+// Grava estado e cidade do destinatário, se a venda ainda não tiver.
+async function gravarRegiao(vendaId: number, s: EnvioMl) {
+  const { uf, cidade } = regiaoDoEnvio(s);
+  if (!uf) return;
+  await sql`UPDATE vendas SET uf = ${uf}, cidade = ${cidade} WHERE id = ${vendaId} AND uf IS NULL`;
+}
+
+// Atualiza a entrega pelo status do envio (e a região). Devolve true se o status mudou.
 async function atualizarEnvio(vendaId: number, envioId: string, token: string) {
-  const s = await get<{ status?: string; tracking_number?: string | null }>(`/shipments/${envioId}`, token);
+  const s = await get<EnvioMl>(`/shipments/${envioId}`, token);
+  await gravarRegiao(vendaId, s);
   const novo = statusDoEnvio(s.status);
   if (!novo) return false;
   const upd = await sql`UPDATE vendas SET status_entrega = ${novo}, codigo_rastreio = COALESCE(${s.tracking_number ?? null}, codigo_rastreio)
     WHERE id = ${vendaId} AND status_entrega <> ${novo} RETURNING id`;
   return upd.length > 0;
+}
+
+// Preenche a região das vendas que ainda não têm (pedidos antigos ou já entregues), aos poucos.
+async function preencherRegioes(token: string, limite = 60) {
+  const vendas = (await sql`SELECT id, observacoes FROM vendas WHERE canal = ${CANAL} AND uf IS NULL
+    AND observacoes LIKE '%Envio %' ORDER BY id DESC LIMIT ${limite}`) as { id: number; observacoes: string }[];
+  for (const v of vendas) {
+    const envio = /Envio (\d+)/.exec(v.observacoes)?.[1];
+    if (!envio) continue;
+    try {
+      await gravarRegiao(v.id, await get<EnvioMl>(`/shipments/${envio}`, token));
+    } catch {
+      // envio sem acesso: fica sem região
+    }
+  }
 }
 
 export async function sincronizar({ dias = 30 } = {}) {
@@ -149,6 +172,8 @@ export async function sincronizar({ dias = 30 } = {}) {
         // envio indisponível (ex.: Full/sem permissão): mantém o status manual
       }
     }
+
+    await preencherRegioes(i.access_token);
 
     await sql`UPDATE integracoes SET ultima_sync = now(), ultimo_erro = NULL WHERE provedor = ${CANAL}`;
     return { novos, atualizados };

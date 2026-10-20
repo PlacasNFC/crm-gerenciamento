@@ -1,4 +1,5 @@
 import { CANAIS, STATUS_ENTREGA, hoje } from "@/lib/constants";
+import { ESTADOS } from "@/lib/regioes";
 
 export type Venda = {
   id: number;
@@ -15,6 +16,8 @@ export type Venda = {
   status_entrega: string;
   codigo_rastreio: string | null;
   observacoes: string | null;
+  uf: string | null;
+  cidade: string | null;
 };
 
 export function VendaForm({
@@ -85,7 +88,20 @@ export function VendaForm({
         <span>Código de rastreio</span>
         <input name="codigo_rastreio" defaultValue={d("codigo_rastreio")} />
       </label>
-      <label className="field sm:col-span-2 lg:col-span-3">
+      <label className="field">
+        <span>Estado do cliente</span>
+        <select name="uf" defaultValue={d("uf") ?? ""}>
+          <option value="">—</option>
+          {Object.entries(ESTADOS).map(([k, v]) => (
+            <option key={k} value={k}>{k} · {v}</option>
+          ))}
+        </select>
+      </label>
+      <label className="field">
+        <span>Cidade</span>
+        <input name="cidade" defaultValue={d("cidade")} />
+      </label>
+      <label className="field sm:col-span-2">
         <span>Observações</span>
         <input name="observacoes" defaultValue={d("observacoes")} />
       </label>

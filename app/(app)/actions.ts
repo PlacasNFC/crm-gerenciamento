@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { sql, ensureSchema } from "@/lib/db";
 import { CANAIS, STATUS_ENTREGA } from "@/lib/constants";
+import { ESTADOS } from "@/lib/regioes";
+import { pecasDoTitulo } from "@/lib/pecas";
 
 const txt = (f: FormData, k: string) => {
   const v = String(f.get(k) ?? "").trim();
@@ -43,6 +45,8 @@ function vendaDe(f: FormData) {
     status_entrega: status,
     codigo_rastreio: txt(f, "codigo_rastreio"),
     observacoes: txt(f, "observacoes"),
+    uf: ((u) => (u && u in ESTADOS ? u : null))(txt(f, "uf")?.toUpperCase() ?? null),
+    cidade: txt(f, "cidade"),
   };
 }
 
@@ -54,9 +58,9 @@ export async function criarVenda(f: FormData) {
   await ensureSchema();
   const v = vendaDe(f);
   await sql`INSERT INTO vendas
-    (data, canal, pedido_externo, cliente, produto, quantidade, valor_bruto, taxa_plataforma, frete, custo_produto, status_entrega, codigo_rastreio, observacoes)
+    (data, canal, pedido_externo, cliente, produto, quantidade, valor_bruto, taxa_plataforma, frete, custo_produto, status_entrega, codigo_rastreio, observacoes, uf, cidade)
     VALUES (COALESCE(${v.data}::date, CURRENT_DATE), ${v.canal}, ${v.pedido_externo}, ${v.cliente}, ${v.produto}, ${v.quantidade},
-      ${v.valor_bruto}, ${v.taxa_plataforma}, ${v.frete}, ${v.custo_produto}, ${v.status_entrega}, ${v.codigo_rastreio}, ${v.observacoes})`;
+      ${v.valor_bruto}, ${v.taxa_plataforma}, ${v.frete}, ${v.custo_produto}, ${v.status_entrega}, ${v.codigo_rastreio}, ${v.observacoes}, ${v.uf}, ${v.cidade})`;
   refresh();
 }
 
@@ -67,7 +71,7 @@ export async function atualizarVenda(id: number, f: FormData) {
     data = COALESCE(${v.data}::date, data), canal = ${v.canal}, pedido_externo = ${v.pedido_externo}, cliente = ${v.cliente},
     produto = ${v.produto}, quantidade = ${v.quantidade}, valor_bruto = ${v.valor_bruto}, taxa_plataforma = ${v.taxa_plataforma},
     frete = ${v.frete}, custo_produto = ${v.custo_produto}, status_entrega = ${v.status_entrega},
-    codigo_rastreio = ${v.codigo_rastreio}, observacoes = ${v.observacoes}
+    codigo_rastreio = ${v.codigo_rastreio}, observacoes = ${v.observacoes}, uf = ${v.uf}, cidade = ${v.cidade}
     WHERE id = ${id}`;
   refresh();
   redirect("/vendas");
@@ -103,4 +107,26 @@ export async function excluirMovimentacao(id: number) {
   await ensureSchema();
   await sql`DELETE FROM movimentacoes WHERE id = ${id}`;
   refresh();
+}
+
+// Peças por anúncio ajustadas à mão. Campo vazio ou igual ao detectado no título remove o ajuste.
+export async function salvarPecas(f: FormData) {
+  await ensureSchema();
+  const produtos = f.getAll("produto").map(String);
+  const valores = f.getAll("pecas").map((v) => String(v).trim());
+  const manter: string[] = [], pecas: number[] = [], remover: string[] = [];
+  produtos.forEach((p, i) => {
+    const n = Number(valores[i]);
+    if (valores[i] && Number.isInteger(n) && n > 0 && n <= 1000 && n !== (pecasDoTitulo(p) ?? 1)) {
+      manter.push(p);
+      pecas.push(n);
+    } else remover.push(p);
+  });
+  await sql.transaction([
+    sql`DELETE FROM pecas_produto WHERE produto = ANY(${remover}::text[])`,
+    sql`INSERT INTO pecas_produto (produto, pecas) SELECT * FROM unnest(${manter}::text[], ${pecas}::int[])
+      ON CONFLICT (produto) DO UPDATE SET pecas = EXCLUDED.pecas`,
+  ]);
+  refresh();
+  redirect("/vendas/pecas?salvo=1");
 }

@@ -44,6 +44,12 @@ export function ensureSchema() {
       ultima_sync TIMESTAMPTZ, ultimo_erro TEXT,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )`,
+    sql`ALTER TABLE vendas ADD COLUMN IF NOT EXISTS uf CHAR(2)`,
+    sql`ALTER TABLE vendas ADD COLUMN IF NOT EXISTS cidade TEXT`,
+    sql`CREATE TABLE IF NOT EXISTS pecas_produto (
+      produto TEXT PRIMARY KEY,
+      pecas INTEGER NOT NULL CHECK (pecas > 0)
+    )`,
     sql`CREATE TABLE IF NOT EXISTS kanban_boards (
       id SERIAL PRIMARY KEY,
       nome TEXT NOT NULL,
