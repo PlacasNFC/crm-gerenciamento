@@ -1,6 +1,7 @@
 import { sql, ensureSchema } from "@/lib/db";
 import { mlConfigurado } from "@/lib/ml";
 import { desconectarMl, sincronizarMl } from "./actions";
+import { Cabecalho } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +28,7 @@ export default async function Integracoes({
 
   return (
     <>
-      <h1 className="text-2xl font-semibold">Integrações</h1>
+      <Cabecalho titulo="Integrações" sub="Conexões com as lojas. Shopee e TikTok Shop dependem de aprovação das plataformas." />
       {sp.erro && <p className="card text-sm text-red-600">{ERROS[sp.erro] ?? "Erro na integração."}</p>}
       {sp.conectado && <p className="card text-sm text-green-600">Mercado Livre conectado.</p>}
       {sp.novos !== undefined && (
@@ -36,7 +37,7 @@ export default async function Integracoes({
 
       <section className="card space-y-3">
         <div className="flex flex-wrap items-center gap-2">
-          <h2 className="font-medium">Mercado Livre</h2>
+          <h2 className="card-title">Mercado Livre</h2>
           <span className={`badge ${ml ? "bg-green-500/15 text-green-600" : "bg-black/5 text-muted"}`}>
             {ml ? `conectado${ml.conta_nome ? ` · ${ml.conta_nome}` : ""}` : "não conectado"}
           </span>

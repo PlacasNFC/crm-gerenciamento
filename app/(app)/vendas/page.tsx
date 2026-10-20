@@ -5,6 +5,8 @@ import { intervaloMes, mesValido } from "@/components/MesFiltro";
 import { VendaForm, type Venda } from "@/components/VendaForm";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ExcluirBotao } from "@/components/ExcluirBotao";
+import { Cabecalho, Truncado } from "@/components/ui";
+import { Icone } from "@/components/Icone";
 import { criarVenda, excluirVenda } from "../actions";
 
 export const dynamic = "force-dynamic";
@@ -20,18 +22,34 @@ export default async function Vendas({ searchParams }: { searchParams: Promise<{
     WHERE data >= ${ini} AND data < ${prox} AND (${canal}::text IS NULL OR canal = ${canal})
     ORDER BY data DESC, id DESC`) as Venda[];
 
+  const ativas = vendas.filter((v) => v.status_entrega !== "cancelado" && v.status_entrega !== "devolvido");
+  const bruto = ativas.reduce((a, v) => a + Number(v.valor_bruto), 0);
+  const liquidoTot = ativas.reduce((a, v) => a + Number(v.valor_bruto) - Number(v.taxa_plataforma) - Number(v.frete), 0);
+
   return (
     <>
-      <h1 className="text-2xl font-semibold">Vendas</h1>
+      <Cabecalho titulo="Vendas" sub="Pedidos do Mercado Livre entram sozinhos. Lance aqui as vendas dos outros canais." />
 
-      <section className="card">
-        <h2 className="font-medium mb-3">Nova venda</h2>
-        <VendaForm action={criarVenda} />
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <Resumo titulo="Vendas no mês" valor={String(ativas.length)} />
+        <Resumo titulo="Faturamento" valor={brl(bruto)} />
+        <Resumo titulo="Líquido" valor={brl(liquidoTot)} />
+        <Resumo titulo="Ticket médio" valor={brl(ativas.length ? bruto / ativas.length : 0)} />
       </section>
+
+      <details className="card group p-0">
+        <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 font-medium sm:px-5">
+          <Icone nome="mais" className="size-4 text-accent transition-transform group-open:rotate-45" />
+          Lançar venda manual
+        </summary>
+        <div className="border-t border-border px-4 py-4 sm:px-5">
+          <VendaForm action={criarVenda} />
+        </div>
+      </details>
 
       <section className="card overflow-x-auto">
         <div className="flex flex-wrap items-end justify-between gap-3 mb-3">
-          <h2 className="font-medium">{vendas.length} vendas no mês</h2>
+          <h2 className="card-title">{vendas.length} registro{vendas.length === 1 ? "" : "s"}</h2>
           <form action="/vendas" className="flex flex-wrap items-end gap-2">
             <label className="field">
               <span>Mês</span>
@@ -50,7 +68,7 @@ export default async function Vendas({ searchParams }: { searchParams: Promise<{
         <table className="tbl">
           <thead>
             <tr>
-              <th>Data</th><th>Canal</th><th>Pedido</th><th>Produto</th><th>Cliente</th><th>Valor</th><th>Líquido</th><th>Entrega</th><th></th>
+              <th>Data</th><th>Canal</th><th>Pedido</th><th>Produto</th><th>Cliente</th><th className="text-right">Valor</th><th className="text-right">Líquido</th><th>Entrega</th><th></th>
             </tr>
           </thead>
           <tbody>
@@ -60,11 +78,16 @@ export default async function Vendas({ searchParams }: { searchParams: Promise<{
                 <tr key={v.id}>
                   <td className="whitespace-nowrap">{dataBR(v.data)}</td>
                   <td className="whitespace-nowrap">{CANAIS[v.canal as Canal]}</td>
-                  <td>{v.pedido_externo ?? "—"}</td>
-                  <td>{v.quantidade > 1 ? `${v.quantidade}× ` : ""}{v.produto}</td>
-                  <td>{v.cliente ?? "—"}</td>
-                  <td className="whitespace-nowrap">{brl(v.valor_bruto)}</td>
-                  <td className="whitespace-nowrap">{brl(liquido)}</td>
+                  <td className="whitespace-nowrap text-xs text-muted tabular-nums">{v.pedido_externo ?? "—"}</td>
+                  <td>
+                    <span className="flex items-center gap-1.5">
+                      {v.quantidade > 1 && <span className="badge shrink-0 bg-surface-2 text-muted">{v.quantidade}×</span>}
+                      <Truncado texto={v.produto} />
+                    </span>
+                  </td>
+                  <td><Truncado texto={v.cliente} className="block max-w-[10rem] truncate" /></td>
+                  <td className="whitespace-nowrap text-right tabular-nums">{brl(v.valor_bruto)}</td>
+                  <td className="whitespace-nowrap text-right tabular-nums">{brl(liquido)}</td>
                   <td><StatusBadge status={v.status_entrega as StatusEntrega} /></td>
                   <td className="whitespace-nowrap space-x-3">
                     <Link href={`/vendas/${v.id}`} className="text-xs text-accent hover:underline">Editar</Link>
@@ -80,5 +103,14 @@ export default async function Vendas({ searchParams }: { searchParams: Promise<{
         </table>
       </section>
     </>
+  );
+}
+
+function Resumo({ titulo, valor }: { titulo: string; valor: string }) {
+  return (
+    <div className="card py-3">
+      <p className="text-xs text-muted">{titulo}</p>
+      <p className="mt-0.5 text-lg font-semibold tabular-nums">{valor}</p>
+    </div>
   );
 }

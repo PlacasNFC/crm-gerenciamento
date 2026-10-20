@@ -1,33 +1,18 @@
-import Link from "next/link";
+import { sql, ensureSchema } from "@/lib/db";
+import { Sidebar } from "@/components/Sidebar";
 import { logout } from "../login/actions";
 
-const links = [
-  { href: "/", label: "Resumo" },
-  { href: "/vendas", label: "Vendas" },
-  { href: "/entregas", label: "Entregas" },
-  { href: "/movimentacoes", label: "Entradas e saídas" },
-  { href: "/integracoes", label: "Integrações" },
-];
+export const dynamic = "force-dynamic";
 
-export default function AppLayout({ children }: { children: React.ReactNode }) {
+export default async function AppLayout({ children }: { children: React.ReactNode }) {
+  await ensureSchema();
+  const [{ n }] = (await sql`SELECT COUNT(*)::int AS n FROM vendas WHERE status_entrega = 'a_enviar'`) as { n: number }[];
   return (
     <div className="min-h-screen">
-      <header className="border-b border-border bg-surface">
-        <div className="mx-auto max-w-6xl px-4 py-3 flex flex-wrap items-center gap-x-6 gap-y-2">
-          <span className="font-semibold">Placas NFC</span>
-          <nav className="flex flex-wrap gap-4 text-sm">
-            {links.map((l) => (
-              <Link key={l.href} href={l.href} className="text-muted hover:text-accent">
-                {l.label}
-              </Link>
-            ))}
-          </nav>
-          <form action={logout} className="ml-auto">
-            <button className="btn-ghost">Sair</button>
-          </form>
-        </div>
-      </header>
-      <main className="mx-auto max-w-6xl px-4 py-6 space-y-6">{children}</main>
+      <Sidebar logout={logout} aEnviar={n} />
+      <div className="lg:pl-64">
+        <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8 space-y-6">{children}</main>
+      </div>
     </div>
   );
 }

@@ -1,132 +1,199 @@
 import Link from "next/link";
 import { sql, ensureSchema } from "@/lib/db";
-import { CANAIS, brl, mesAtual, type Canal } from "@/lib/constants";
-import { MesFiltro, intervaloMes, mesValido } from "@/components/MesFiltro";
+import { brl, hoje } from "@/lib/constants";
+import { Cabecalho, Kpi, Truncado, Vazio } from "@/components/ui";
+import { BarrasHorizontais, GraficoDiario, type Dia } from "@/components/GraficoDiario";
 
 export const dynamic = "force-dynamic";
 
-type LinhaCanal = { canal: Canal; pedidos: string; bruto: string; taxas: string; frete: string; custo: string };
+const PERIODOS = { "7": "7 dias", "30": "30 dias", "90": "90 dias" } as const;
+const CANAL = "mercado_livre";
+const DIAS_SEMANA = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 
-export default async function Resumo({ searchParams }: { searchParams: Promise<{ mes?: string }> }) {
+const somaDias = (d: string, n: number) => {
+  const dt = new Date(d + "T12:00:00Z");
+  dt.setUTCDate(dt.getUTCDate() + n);
+  return dt.toISOString().slice(0, 10);
+};
+const variacao = (atual: number, anterior: number) => (anterior > 0 ? ((atual - anterior) / anterior) * 100 : null);
+
+export default async function Painel({ searchParams }: { searchParams: Promise<{ p?: string }> }) {
   await ensureSchema();
-  const mes = mesValido((await searchParams).mes, mesAtual());
-  const { ini, prox } = intervaloMes(mes);
+  const pRaw = (await searchParams).p;
+  const p = pRaw && pRaw in PERIODOS ? (pRaw as keyof typeof PERIODOS) : "30";
+  const n = Number(p);
+  const fim = hoje();
+  const ini = somaDias(fim, -(n - 1));
+  const iniAnt = somaDias(ini, -n);
 
-  const [porCanalR, movsR, pendentesR] = await Promise.all([
-    sql`SELECT canal, COUNT(*) AS pedidos, SUM(valor_bruto) AS bruto, SUM(taxa_plataforma) AS taxas,
-          SUM(frete) AS frete, SUM(custo_produto) AS custo
-        FROM vendas
-        WHERE data >= ${ini} AND data < ${prox} AND status_entrega NOT IN ('cancelado','devolvido')
-        GROUP BY canal`,
-    sql`SELECT tipo, categoria, SUM(valor) AS total FROM movimentacoes
-        WHERE data >= ${ini} AND data < ${prox} GROUP BY tipo, categoria ORDER BY total DESC`,
-    sql`SELECT status_entrega, COUNT(*) AS n FROM vendas
+  const [diasR, antR, cancR, topR, pendR, mlR] = await Promise.all([
+    sql`WITH dias AS (SELECT generate_series(${ini}::date, ${fim}::date, interval '1 day')::date AS d)
+        SELECT to_char(d, 'YYYY-MM-DD') AS dia, COUNT(v.id)::int AS pedidos, COALESCE(SUM(v.quantidade), 0)::int AS unidades,
+          COALESCE(SUM(v.valor_bruto), 0)::float AS bruto, COALESCE(SUM(v.taxa_plataforma), 0)::float AS taxas,
+          COALESCE(SUM(v.frete), 0)::float AS frete
+        FROM dias LEFT JOIN vendas v ON v.data = dias.d AND v.canal = ${CANAL} AND v.status_entrega NOT IN ('cancelado','devolvido')
+        GROUP BY d ORDER BY d`,
+    sql`SELECT COUNT(*)::int AS pedidos, COALESCE(SUM(valor_bruto), 0)::float AS bruto,
+          COALESCE(SUM(valor_bruto - taxa_plataforma - frete), 0)::float AS liquido
+        FROM vendas WHERE canal = ${CANAL} AND data >= ${iniAnt} AND data < ${ini} AND status_entrega NOT IN ('cancelado','devolvido')`,
+    sql`SELECT COUNT(*)::int AS n FROM vendas WHERE canal = ${CANAL} AND data >= ${ini} AND status_entrega IN ('cancelado','devolvido')`,
+    sql`SELECT produto, SUM(quantidade)::int AS unidades, COUNT(*)::int AS pedidos, SUM(valor_bruto)::float AS bruto
+        FROM vendas WHERE canal = ${CANAL} AND data >= ${ini} AND status_entrega NOT IN ('cancelado','devolvido')
+        GROUP BY produto ORDER BY bruto DESC LIMIT 5`,
+    sql`SELECT status_entrega, COUNT(*)::int AS n, MIN(data)::text AS mais_antiga FROM vendas
         WHERE status_entrega IN ('a_enviar','enviado') GROUP BY status_entrega`,
+    sql`SELECT conta_nome, ultima_sync, ultimo_erro FROM integracoes WHERE provedor = ${CANAL}`,
   ]);
-  const porCanal = porCanalR as LinhaCanal[];
-  const movs = movsR as { tipo: "entrada" | "saida"; categoria: string; total: string }[];
-  const pendentes = pendentesR as { status_entrega: string; n: string }[];
+  const dias = diasR as Dia[];
+  const ant = (antR as { pedidos: number; bruto: number; liquido: number }[])[0];
+  const cancelados = (cancR as { n: number }[])[0].n;
+  const top = topR as { produto: string; unidades: number; pedidos: number; bruto: number }[];
+  const pend = pendR as { status_entrega: string; n: number; mais_antiga: string }[];
+  const ml = (mlR as { conta_nome: string | null; ultima_sync: Date | null; ultimo_erro: string | null }[])[0];
 
-  const n = (v: string | null | undefined) => Number(v ?? 0);
-  const linhas = (Object.keys(CANAIS) as Canal[]).map((c) => {
-    const r = porCanal.find((x) => x.canal === c);
-    const bruto = n(r?.bruto), taxas = n(r?.taxas), frete = n(r?.frete), custo = n(r?.custo);
-    return { canal: c, pedidos: n(r?.pedidos), bruto, taxas, frete, custo, liquido: bruto - taxas - frete, lucro: bruto - taxas - frete - custo };
-  });
-  const tot = linhas.reduce(
-    (a, l) => ({ pedidos: a.pedidos + l.pedidos, bruto: a.bruto + l.bruto, liquido: a.liquido + l.liquido, lucro: a.lucro + l.lucro, taxas: a.taxas + l.taxas, frete: a.frete + l.frete, custo: a.custo + l.custo }),
-    { pedidos: 0, bruto: 0, liquido: 0, lucro: 0, taxas: 0, frete: 0, custo: 0 },
+  const tot = dias.reduce(
+    (a, d) => ({ pedidos: a.pedidos + d.pedidos, unidades: a.unidades + d.unidades, bruto: a.bruto + d.bruto, taxas: a.taxas + d.taxas, frete: a.frete + d.frete }),
+    { pedidos: 0, unidades: 0, bruto: 0, taxas: 0, frete: 0 },
   );
-  const entradas = movs.filter((m) => m.tipo === "entrada").reduce((a, m) => a + n(m.total), 0);
-  const saidas = movs.filter((m) => m.tipo === "saida").reduce((a, m) => a + n(m.total), 0);
-  const resultado = tot.lucro + entradas - saidas;
-  const aEnviar = n(pendentes.find((p) => p.status_entrega === "a_enviar")?.n);
-  const enviados = n(pendentes.find((p) => p.status_entrega === "enviado")?.n);
+  const liquido = tot.bruto - tot.taxas - tot.frete;
+  const ticket = tot.pedidos ? tot.bruto / tot.pedidos : 0;
+  const tarifaPct = tot.bruto ? (tot.taxas / tot.bruto) * 100 : 0;
+  const hojeD = dias[dias.length - 1];
+  const ontem = dias[dias.length - 2];
+  const melhor = dias.reduce((m, d) => (d.bruto > m.bruto ? d : m), dias[0]);
+
+  // média de faturamento por dia da semana no período
+  const semana = DIAS_SEMANA.map((rotulo, i) => {
+    const ds = dias.filter((d) => new Date(d.dia + "T12:00:00").getDay() === i);
+    const soma = ds.reduce((a, d) => a + d.bruto, 0);
+    const ped = ds.reduce((a, d) => a + d.pedidos, 0);
+    return { rotulo, valor: ds.length ? soma / ds.length : 0, sub: ds.length ? `${(ped / ds.length).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} ped.` : undefined };
+  });
+
+  const aEnviar = pend.find((x) => x.status_entrega === "a_enviar");
+  const emTransito = pend.find((x) => x.status_entrega === "enviado");
+  const diasParado = aEnviar ? Math.floor((Date.now() - new Date(aEnviar.mais_antiga + "T12:00:00").getTime()) / 864e5) : 0;
+  const dataCurta = (d: string) => new Date(d + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
 
   return (
     <>
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <h1 className="text-2xl font-semibold">Resumo</h1>
-        <MesFiltro mes={mes} action="/" />
-      </div>
+      <Cabecalho
+        titulo="Painel"
+        sub={
+          <span className="inline-flex items-center gap-2">
+            <span className="rounded px-1.5 py-0.5 text-[11px] font-bold" style={{ background: "var(--ml)", color: "var(--ml-fg)" }}>
+              Mercado Livre
+            </span>
+            {ml ? (
+              <>
+                {ml.conta_nome}
+                {ml.ultima_sync && ` · atualizado ${new Date(ml.ultima_sync).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" })}`}
+              </>
+            ) : (
+              <Link href="/integracoes" className="text-accent hover:underline">conectar conta</Link>
+            )}
+          </span>
+        }
+      >
+        <nav className="tabs">
+          {Object.entries(PERIODOS).map(([k, v]) => (
+            <Link key={k} href={`/?p=${k}`} data-ativo={p === k}>{v}</Link>
+          ))}
+        </nav>
+      </Cabecalho>
 
-      <section className="grid gap-3 grid-cols-2 lg:grid-cols-4">
-        <Kpi titulo="Faturamento bruto" valor={brl(tot.bruto)} sub={`${tot.pedidos} pedidos`} />
-        <Kpi titulo="Líquido (após taxas e frete)" valor={brl(tot.liquido)} />
-        <Kpi titulo="Outras entradas − saídas" valor={brl(entradas - saidas)} sub={`+${brl(entradas)} / −${brl(saidas)}`} />
-        <Kpi titulo="Resultado do mês" valor={brl(resultado)} destaque={resultado >= 0 ? "pos" : "neg"} />
+      {ml?.ultimo_erro && (
+        <p className="card border-red-300 text-sm text-neg">
+          Última importação do Mercado Livre falhou: {ml.ultimo_erro} · <Link href="/integracoes" className="underline">ver integração</Link>
+        </p>
+      )}
+
+      <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Kpi
+          titulo="Hoje"
+          valor={brl(hojeD.bruto)}
+          sub={<>{hojeD.pedidos} pedido{hojeD.pedidos === 1 ? "" : "s"} · ontem {brl(ontem?.bruto ?? 0)}</>}
+        />
+        <Kpi titulo={`Faturamento · ${PERIODOS[p]}`} valor={brl(tot.bruto)} delta={variacao(tot.bruto, ant.bruto)} sub="vs. período anterior" />
+        <Kpi
+          titulo="Líquido (após tarifas e frete)"
+          valor={brl(liquido)}
+          delta={variacao(liquido, ant.liquido)}
+          sub={`tarifa média ${tarifaPct.toFixed(1)}%`}
+          destaque="pos"
+        />
+        <Kpi
+          titulo="Pedidos"
+          valor={String(tot.pedidos)}
+          delta={variacao(tot.pedidos, ant.pedidos)}
+          sub={`ticket médio ${brl(ticket)}${cancelados ? ` · ${cancelados} cancelado${cancelados === 1 ? "" : "s"}` : ""}`}
+        />
       </section>
 
-      <section className="card overflow-x-auto">
-        <h2 className="font-medium mb-3">Vendas por canal</h2>
-        <table className="tbl">
-          <thead>
-            <tr>
-              <th>Canal</th><th>Pedidos</th><th>Bruto</th><th>Taxas</th><th>Frete</th><th>Líquido</th><th>Custo prod.</th><th>Lucro</th><th>% do bruto</th>
-            </tr>
-          </thead>
-          <tbody>
-            {linhas.map((l) => (
-              <tr key={l.canal}>
-                <td className="font-medium">{CANAIS[l.canal]}</td>
-                <td>{l.pedidos}</td>
-                <td>{brl(l.bruto)}</td>
-                <td>{brl(l.taxas)}</td>
-                <td>{brl(l.frete)}</td>
-                <td>{brl(l.liquido)}</td>
-                <td>{brl(l.custo)}</td>
-                <td className={l.lucro < 0 ? "text-red-600" : ""}>{brl(l.lucro)}</td>
-                <td>{tot.bruto ? ((l.bruto / tot.bruto) * 100).toFixed(1) + "%" : "—"}</td>
-              </tr>
-            ))}
-            <tr className="font-semibold">
-              <td>Total</td><td>{tot.pedidos}</td><td>{brl(tot.bruto)}</td><td>{brl(tot.taxas)}</td><td>{brl(tot.frete)}</td>
-              <td>{brl(tot.liquido)}</td><td>{brl(tot.custo)}</td><td>{brl(tot.lucro)}</td><td></td>
-            </tr>
-          </tbody>
-        </table>
-        <p className="text-xs text-muted mt-2">Vendas canceladas ou devolvidas não entram nos totais.</p>
+      <section className="card">
+        <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="card-title">Vendas por dia</h2>
+          {melhor.bruto > 0 && (
+            <p className="text-xs text-muted">
+              Melhor dia: <b className="text-fg">{dataCurta(melhor.dia)}</b> com {brl(melhor.bruto)} ({melhor.pedidos} pedidos)
+            </p>
+          )}
+        </div>
+        <GraficoDiario dias={dias} />
       </section>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <section className="card">
-          <h2 className="font-medium mb-3">Entregas em aberto</h2>
-          <p className="text-sm">
-            <b>{aEnviar}</b> a enviar · <b>{enviados}</b> em trânsito
-          </p>
-          <Link href="/entregas" className="text-sm text-accent hover:underline">Ver entregas →</Link>
-        </section>
-        <section className="card overflow-x-auto">
-          <h2 className="font-medium mb-3">Entradas e saídas por categoria</h2>
-          {movs.length === 0 ? (
-            <p className="text-sm text-muted">Nada lançado neste mês.</p>
+      <div className="grid gap-6 lg:grid-cols-3">
+        <section className="card lg:col-span-2 min-w-0">
+          <h2 className="card-title mb-3">Mais vendidos · {PERIODOS[p]}</h2>
+          {top.length === 0 ? (
+            <Vazio>Nenhuma venda no período.</Vazio>
           ) : (
-            <table className="tbl">
-              <tbody>
-                {movs.map((m) => (
-                  <tr key={m.tipo + m.categoria}>
-                    <td>{m.categoria}</td>
-                    <td className={m.tipo === "saida" ? "text-red-600 text-right" : "text-green-700 text-right"}>
-                      {m.tipo === "saida" ? "−" : "+"}{brl(m.total)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="overflow-x-auto">
+              <table className="tbl">
+                <thead>
+                  <tr><th>Produto</th><th className="text-right">Unid.</th><th className="text-right">Pedidos</th><th className="text-right">Faturamento</th><th className="text-right">% do total</th></tr>
+                </thead>
+                <tbody>
+                  {top.map((t) => (
+                    <tr key={t.produto}>
+                      <td className="max-w-0 w-full"><Truncado texto={t.produto} className="block truncate" /></td>
+                      <td className="text-right tabular-nums">{t.unidades}</td>
+                      <td className="text-right tabular-nums">{t.pedidos}</td>
+                      <td className="text-right tabular-nums whitespace-nowrap">{brl(t.bruto)}</td>
+                      <td className="text-right tabular-nums">{tot.bruto ? ((t.bruto / tot.bruto) * 100).toFixed(0) : 0}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </section>
-      </div>
-    </>
-  );
-}
 
-function Kpi({ titulo, valor, sub, destaque }: { titulo: string; valor: string; sub?: string; destaque?: "pos" | "neg" }) {
-  const cor = destaque === "pos" ? "text-green-700" : destaque === "neg" ? "text-red-600" : "";
-  return (
-    <div className="card">
-      <p className="text-xs text-muted">{titulo}</p>
-      <p className={`text-xl font-semibold mt-1 ${cor}`}>{valor}</p>
-      {sub && <p className="text-xs text-muted mt-1">{sub}</p>}
-    </div>
+        <section className="card">
+          <h2 className="card-title mb-3">Média por dia da semana</h2>
+          <BarrasHorizontais itens={semana} />
+        </section>
+      </div>
+
+      <section className="grid gap-3 sm:grid-cols-3">
+        <Link href="/entregas" className="card block hover:border-accent">
+          <p className="text-xs font-medium text-muted">A enviar</p>
+          <p className="mt-1.5 text-2xl font-semibold">{aEnviar?.n ?? 0}</p>
+          <p className={`mt-1 text-xs ${diasParado >= 2 ? "text-neg font-medium" : "text-muted"}`}>
+            {aEnviar ? `mais antigo há ${diasParado} dia${diasParado === 1 ? "" : "s"}` : "tudo despachado"}
+          </p>
+        </Link>
+        <Link href="/entregas" className="card block hover:border-accent">
+          <p className="text-xs font-medium text-muted">Em trânsito</p>
+          <p className="mt-1.5 text-2xl font-semibold">{emTransito?.n ?? 0}</p>
+          <p className="mt-1 text-xs text-muted">aguardando entrega</p>
+        </Link>
+        <div className="card">
+          <p className="text-xs font-medium text-muted">Unidades vendidas · {PERIODOS[p]}</p>
+          <p className="mt-1.5 text-2xl font-semibold">{tot.unidades}</p>
+          <p className="mt-1 text-xs text-muted">média de {(tot.unidades / n).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} por dia</p>
+        </div>
+      </section>
+    </>
   );
 }

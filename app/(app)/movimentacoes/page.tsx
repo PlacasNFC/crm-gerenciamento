@@ -2,6 +2,7 @@ import { sql, ensureSchema } from "@/lib/db";
 import { CATEGORIAS_ENTRADA, CATEGORIAS_SAIDA, brl, dataBR, hoje, mesAtual } from "@/lib/constants";
 import { MesFiltro, intervaloMes, mesValido } from "@/components/MesFiltro";
 import { ExcluirBotao } from "@/components/ExcluirBotao";
+import { Cabecalho, Kpi } from "@/components/ui";
 import { criarMovimentacao, excluirMovimentacao } from "../actions";
 
 export const dynamic = "force-dynamic";
@@ -12,22 +13,34 @@ export default async function Movimentacoes({ searchParams }: { searchParams: Pr
   await ensureSchema();
   const mes = mesValido((await searchParams).mes, mesAtual());
   const { ini, prox } = intervaloMes(mes);
-  const movs = (await sql`SELECT * FROM movimentacoes WHERE data >= ${ini} AND data < ${prox}
-    ORDER BY data DESC, id DESC`) as Mov[];
+  const [movsR, vendasR] = await Promise.all([
+    sql`SELECT * FROM movimentacoes WHERE data >= ${ini} AND data < ${prox} ORDER BY data DESC, id DESC`,
+    sql`SELECT COALESCE(SUM(valor_bruto - taxa_plataforma - frete - custo_produto), 0)::float AS liquido FROM vendas
+        WHERE data >= ${ini} AND data < ${prox} AND status_entrega NOT IN ('cancelado','devolvido')`,
+  ]);
+  const movs = movsR as Mov[];
+  const vendasLiq = (vendasR as { liquido: number }[])[0].liquido;
   const entradas = movs.filter((m) => m.tipo === "entrada").reduce((a, m) => a + Number(m.valor), 0);
   const saidas = movs.filter((m) => m.tipo === "saida").reduce((a, m) => a + Number(m.valor), 0);
 
   return (
     <>
-      <div>
-        <h1 className="text-2xl font-semibold">Entradas e saídas</h1>
-        <p className="text-sm text-muted">
-          Gastos (material, embalagem, anúncios…) e entradas que não são vendas dos marketplaces. Vendas ficam na aba Vendas.
-        </p>
-      </div>
+      <Cabecalho
+        titulo="Entradas e saídas"
+        sub="Gastos (material, embalagem, anúncios…) e entradas que não são vendas. As vendas entram sozinhas no resultado."
+      >
+        <MesFiltro mes={mes} action="/movimentacoes" />
+      </Cabecalho>
+
+      <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Kpi titulo="Vendas (líquido)" valor={brl(vendasLiq)} sub="todas as lojas, após tarifas e frete" />
+        <Kpi titulo="Outras entradas" valor={brl(entradas)} />
+        <Kpi titulo="Saídas" valor={brl(saidas)} />
+        <Kpi titulo="Resultado do mês" valor={brl(vendasLiq + entradas - saidas)} destaque={vendasLiq + entradas - saidas >= 0 ? "pos" : "neg"} />
+      </section>
 
       <section className="card">
-        <h2 className="font-medium mb-3">Novo lançamento</h2>
+        <h2 className="card-title mb-3">Novo lançamento</h2>
         <form action={criarMovimentacao} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
           <label className="field">
             <span>Data</span>
@@ -62,12 +75,7 @@ export default async function Movimentacoes({ searchParams }: { searchParams: Pr
       </section>
 
       <section className="card overflow-x-auto">
-        <div className="flex flex-wrap items-end justify-between gap-3 mb-3">
-          <p className="text-sm">
-            <span className="text-green-700">+{brl(entradas)}</span> · <span className="text-red-600">−{brl(saidas)}</span> · saldo <b>{brl(entradas - saidas)}</b>
-          </p>
-          <MesFiltro mes={mes} action="/movimentacoes" />
-        </div>
+        <h2 className="card-title mb-3">Lançamentos do mês</h2>
         <table className="tbl">
           <thead>
             <tr><th>Data</th><th>Tipo</th><th>Categoria</th><th>Descrição</th><th className="text-right">Valor</th><th></th></tr>
@@ -78,8 +86,8 @@ export default async function Movimentacoes({ searchParams }: { searchParams: Pr
                 <td className="whitespace-nowrap">{dataBR(m.data)}</td>
                 <td>{m.tipo === "entrada" ? "Entrada" : "Saída"}</td>
                 <td>{m.categoria}</td>
-                <td>{m.descricao ?? "—"}</td>
-                <td className={`text-right whitespace-nowrap ${m.tipo === "saida" ? "text-red-600" : "text-green-700"}`}>
+                <td className="max-w-0 w-full"><span className="block truncate" title={m.descricao ?? ""}>{m.descricao ?? "—"}</span></td>
+                <td className={`text-right whitespace-nowrap ${m.tipo === "saida" ? "text-neg" : "text-pos"}`}>
                   {m.tipo === "saida" ? "−" : "+"}{brl(m.valor)}
                 </td>
                 <td><ExcluirBotao action={excluirMovimentacao.bind(null, m.id)} /></td>

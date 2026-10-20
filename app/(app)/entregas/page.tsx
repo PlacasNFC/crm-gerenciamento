@@ -3,6 +3,7 @@ import { sql, ensureSchema } from "@/lib/db";
 import { CANAIS, STATUS_ENTREGA, dataBR, type Canal, type StatusEntrega } from "@/lib/constants";
 import { StatusBadge } from "@/components/StatusBadge";
 import type { Venda } from "@/components/VendaForm";
+import { Cabecalho, Truncado } from "@/components/ui";
 import { atualizarEntrega } from "../actions";
 
 export const dynamic = "force-dynamic";
@@ -20,14 +21,13 @@ export default async function Entregas({ searchParams }: { searchParams: Promise
 
   return (
     <>
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <h1 className="text-2xl font-semibold">Entregas</h1>
-        <nav className="flex gap-2">
+      <Cabecalho titulo="Entregas" sub="Pedidos do Mercado Livre atualizam sozinhos pelo status do envio.">
+        <nav className="tabs">
           {Object.entries(FILTROS).map(([k, v]) => (
-            <Link key={k} href={`/entregas?f=${k}`} className={`btn-ghost ${f === k ? "border-accent text-accent" : ""}`}>{v}</Link>
+            <Link key={k} href={`/entregas?f=${k}`} data-ativo={f === k}>{v}</Link>
           ))}
         </nav>
-      </div>
+      </Cabecalho>
 
       <section className="card overflow-x-auto">
         <table className="tbl">
@@ -42,13 +42,18 @@ export default async function Entregas({ searchParams }: { searchParams: Promise
                   <td className="whitespace-nowrap">
                     {dataBR(v.data)}
                     {v.status_entrega === "a_enviar" && dias >= 2 && (
-                      <span className="block text-xs text-red-600">há {dias} dias</span>
+                      <span className="block text-xs font-medium text-neg">há {dias} dias</span>
                     )}
                   </td>
                   <td className="whitespace-nowrap">{CANAIS[v.canal as Canal]}</td>
-                  <td>{v.pedido_externo ?? "—"}</td>
-                  <td>{v.quantidade > 1 ? `${v.quantidade}× ` : ""}{v.produto}</td>
-                  <td>{v.cliente ?? "—"}</td>
+                  <td className="whitespace-nowrap text-xs text-muted tabular-nums">{v.pedido_externo ?? "—"}</td>
+                  <td>
+                    <span className="flex items-center gap-1.5">
+                      {v.quantidade > 1 && <span className="badge shrink-0 bg-surface-2 text-muted">{v.quantidade}×</span>}
+                      <Truncado texto={v.produto} />
+                    </span>
+                  </td>
+                  <td><Truncado texto={v.cliente} className="block max-w-[10rem] truncate" /></td>
                   <td><StatusBadge status={v.status_entrega as StatusEntrega} /></td>
                   <td>
                     <form action={atualizarEntrega.bind(null, v.id)} className="flex gap-2 items-center">
