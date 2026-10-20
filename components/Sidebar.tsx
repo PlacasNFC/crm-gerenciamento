@@ -15,6 +15,7 @@ const GRUPOS: { titulo: string; itens: Item[] }[] = [
       { href: "/vendas", label: "Vendas", icone: "vendas" },
       { href: "/entregas", label: "Entregas", icone: "entregas" },
       { href: "/movimentacoes", label: "Entradas e saídas", icone: "dinheiro" },
+      { href: "/simulador", label: "Simulador de custos", icone: "calculadora" },
     ],
   },
   {

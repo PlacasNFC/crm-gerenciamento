@@ -202,3 +202,14 @@ export async function processarNotificacao(n: NotificacaoMl) {
     for (const v of vendas) await atualizarEnvio(v.id, envio, access_token);
   }
 }
+
+// GET autenticado na API do ML com o token da loja (renova se precisar).
+export async function mlGet<T>(path: string): Promise<T> {
+  const { access_token } = await tokenAtual();
+  return get<T>(path, access_token);
+}
+
+export async function contaMl() {
+  const i = await integracaoMl();
+  return i?.conta_id ?? null;
+}
