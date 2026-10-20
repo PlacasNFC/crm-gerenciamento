@@ -1,11 +1,20 @@
-name: CI
+name: CI/CD
 
-# O deploy é feito pela integração Git da Vercel (push na main = produção,
-# outros branches/PRs = preview). Este workflow só valida o código.
+# O plano Hobby da Vercel não conecta repositórios privados de organização,
+# então o deploy é feito aqui pela CLI: push na main = produção.
+# Requer o secret VERCEL_TOKEN no repositório do GitHub.
 on:
   push:
     branches: [main]
   pull_request:
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  VERCEL_ORG_ID: team_3hmBV4EpfdeCOrGYOEuSVS03
+  VERCEL_PROJECT_ID: prj_GjkLcgPy0aeiUzQw3dRa0tCtbh1H
 
 jobs:
   check:
@@ -22,4 +31,23 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npx tsc --noEmit
+      - run: npm test --if-present
       - run: npm run build
+
+  deploy:
+    needs: check
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://placas-nfc-crm.vercel.app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm i -g vercel@50.35.0
+      - run: vercel pull --yes --environment=production --token="${{ secrets.VERCEL_TOKEN }}"
+      - run: vercel build --prod --token="${{ secrets.VERCEL_TOKEN }}"
+      - run: vercel deploy --prebuilt --prod --token="${{ secrets.VERCEL_TOKEN }}"
