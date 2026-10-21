@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { sql, ensureSchema } from "@/lib/db";
-import { brl, hoje } from "@/lib/constants";
+import { brl, hoje, CANAIS, type Canal } from "@/lib/constants";
 import { Cabecalho, Kpi, Truncado, Vazio } from "@/components/ui";
 import { BarrasHorizontais, GraficoDiario, type Dia } from "@/components/GraficoDiario";
 import { MapaEstados, type PorUf } from "@/components/MapaEstados";
@@ -30,32 +30,35 @@ export default async function Painel({ searchParams }: { searchParams: Promise<{
   const ini = somaDias(fim, -(n - 1));
   const iniAnt = somaDias(ini, -n);
 
-  const [diasR, antR, cancR, topR, pendR, mlR, ufR, cidR, diaProdR, ajustes] = await Promise.all([
+  const [diasR, antR, cancR, topR, pendR, mlR, ufR, cidR, diaProdR, canalR, ajustes] = await Promise.all([
     sql`WITH dias AS (SELECT generate_series(${ini}::date, ${fim}::date, interval '1 day')::date AS d)
         SELECT to_char(d, 'YYYY-MM-DD') AS dia, COUNT(v.id)::int AS pedidos, COALESCE(SUM(v.quantidade), 0)::int AS unidades,
           COALESCE(SUM(v.valor_bruto), 0)::float AS bruto, COALESCE(SUM(v.taxa_plataforma), 0)::float AS taxas,
           COALESCE(SUM(v.frete), 0)::float AS frete
-        FROM dias LEFT JOIN vendas v ON v.data = dias.d AND v.canal = ${CANAL} AND v.status_entrega NOT IN ('cancelado','devolvido')
+        FROM dias LEFT JOIN vendas v ON v.data = dias.d AND v.status_entrega NOT IN ('cancelado','devolvido')
         GROUP BY d ORDER BY d`,
     sql`SELECT COUNT(*)::int AS pedidos, COALESCE(SUM(valor_bruto), 0)::float AS bruto,
           COALESCE(SUM(valor_bruto - taxa_plataforma - frete), 0)::float AS liquido
-        FROM vendas WHERE canal = ${CANAL} AND data >= ${iniAnt} AND data < ${ini} AND status_entrega NOT IN ('cancelado','devolvido')`,
-    sql`SELECT COUNT(*)::int AS n FROM vendas WHERE canal = ${CANAL} AND data >= ${ini} AND status_entrega IN ('cancelado','devolvido')`,
+        FROM vendas WHERE data >= ${iniAnt} AND data < ${ini} AND status_entrega NOT IN ('cancelado','devolvido')`,
+    sql`SELECT COUNT(*)::int AS n FROM vendas WHERE data >= ${ini} AND status_entrega IN ('cancelado','devolvido')`,
     sql`SELECT produto, SUM(quantidade)::int AS unidades, COUNT(*)::int AS pedidos, SUM(valor_bruto)::float AS bruto
-        FROM vendas WHERE canal = ${CANAL} AND data >= ${ini} AND status_entrega NOT IN ('cancelado','devolvido')
+        FROM vendas WHERE data >= ${ini} AND status_entrega NOT IN ('cancelado','devolvido')
         GROUP BY produto ORDER BY bruto DESC`,
     sql`SELECT status_entrega, COUNT(*)::int AS n, MIN(data)::text AS mais_antiga FROM vendas
         WHERE status_entrega IN ('a_enviar','enviado') GROUP BY status_entrega`,
     sql`SELECT conta_nome, ultima_sync, ultimo_erro FROM integracoes WHERE provedor = ${CANAL}`,
     sql`SELECT uf, COUNT(*)::int AS pedidos, SUM(valor_bruto)::float AS bruto FROM vendas
-        WHERE canal = ${CANAL} AND data >= ${ini} AND status_entrega NOT IN ('cancelado','devolvido') AND uf IS NOT NULL
+        WHERE data >= ${ini} AND status_entrega NOT IN ('cancelado','devolvido') AND uf IS NOT NULL
         GROUP BY uf ORDER BY bruto DESC`,
     sql`SELECT cidade, uf, COUNT(*)::int AS pedidos, SUM(valor_bruto)::float AS bruto FROM vendas
-        WHERE canal = ${CANAL} AND data >= ${ini} AND status_entrega NOT IN ('cancelado','devolvido') AND cidade IS NOT NULL
+        WHERE data >= ${ini} AND status_entrega NOT IN ('cancelado','devolvido') AND cidade IS NOT NULL
         GROUP BY cidade, uf ORDER BY pedidos DESC, bruto DESC LIMIT 8`,
     sql`SELECT to_char(data, 'YYYY-MM-DD') AS dia, produto, SUM(quantidade)::int AS q FROM vendas
-        WHERE canal = ${CANAL} AND data >= ${ini} AND status_entrega NOT IN ('cancelado','devolvido')
+        WHERE data >= ${ini} AND status_entrega NOT IN ('cancelado','devolvido')
         GROUP BY 1, 2`,
+    sql`SELECT canal, COUNT(*)::int AS pedidos, SUM(valor_bruto)::float AS bruto FROM vendas
+        WHERE data >= ${ini} AND status_entrega NOT IN ('cancelado','devolvido')
+        GROUP BY canal ORDER BY bruto DESC`,
     ajustesPecas(),
   ]);
   const porUf = ufR as PorUf[];
@@ -73,6 +76,7 @@ export default async function Painel({ searchParams }: { searchParams: Promise<{
     .slice(0, 5);
   const totalPecas = dias.reduce((a, d) => a + d.pecas, 0);
   const pend = pendR as { status_entrega: string; n: number; mais_antiga: string }[];
+  const porCanal = canalR as { canal: string; pedidos: number; bruto: number }[];
   const ml = (mlR as { conta_nome: string | null; ultima_sync: Date | null; ultimo_erro: string | null }[])[0];
 
   const tot = dias.reduce(
@@ -115,6 +119,7 @@ export default async function Painel({ searchParams }: { searchParams: Promise<{
         titulo="Painel"
         sub={
           <span className="inline-flex items-center gap-2">
+            Todos os canais ·
             <span className="rounded px-1.5 py-0.5 text-[11px] font-bold" style={{ background: "var(--ml)", color: "var(--ml-fg)" }}>
               Mercado Livre
             </span>
@@ -148,7 +153,16 @@ export default async function Painel({ searchParams }: { searchParams: Promise<{
           valor={brl(hojeD.bruto)}
           sub={<>{hojeD.pedidos} pedido{hojeD.pedidos === 1 ? "" : "s"} · ontem {brl(ontem?.bruto ?? 0)}</>}
         />
-        <Kpi titulo={`Faturamento · ${PERIODOS[p]}`} valor={brl(tot.bruto)} delta={variacao(tot.bruto, ant.bruto)} sub="vs. período anterior" />
+        <Kpi
+          titulo={`Faturamento · ${PERIODOS[p]}`}
+          valor={brl(tot.bruto)}
+          delta={variacao(tot.bruto, ant.bruto)}
+          sub={
+            porCanal.length > 1
+              ? porCanal.map((c) => `${CANAIS[c.canal as Canal] ?? c.canal} ${brl(c.bruto)}`).join(" · ")
+              : "vs. período anterior"
+          }
+        />
         <Kpi
           titulo="Líquido (após tarifas e frete)"
           valor={brl(liquido)}
@@ -218,7 +232,7 @@ export default async function Painel({ searchParams }: { searchParams: Promise<{
           <h2 className="card-title">Vendas por região · {PERIODOS[p]}</h2>
           {semRegiao > 0 && (
             <p className="text-xs text-muted">
-              {semRegiao} pedido{semRegiao === 1 ? "" : "s"} ainda sem endereço (preenchidos na próxima importação do ML)
+              {semRegiao} pedido{semRegiao === 1 ? "" : "s"} sem endereço
             </p>
           )}
         </div>
