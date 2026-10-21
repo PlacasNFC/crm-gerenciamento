@@ -1,5 +1,8 @@
 // Conversão pura dos dados da API do Mercado Livre (sem acesso ao banco).
 
+// O que a transportadora cobra por pedido Flex.
+export const CUSTO_FLEX = 12.95;
+
 export type PedidoMl = {
   id: number;
   date_created: string;
@@ -62,6 +65,8 @@ export function vendaDoPedido(p: PedidoMl) {
 export type EnvioMl = {
   status?: string;
   tracking_number?: string | null;
+  logistic_type?: string;
+  logistic?: { type?: string };
   receiver_address?: { state?: { id?: string | null; name?: string | null } | null; city?: { name?: string | null } | null } | null;
 };
 
@@ -71,4 +76,21 @@ export function regiaoDoEnvio(s: EnvioMl): { uf: string | null; cidade: string |
   const uf = /^BR-([A-Z]{2})$/.exec(id)?.[1] ?? null;
   const cidade = s.receiver_address?.city?.name?.trim() || null;
   return { uf, cidade };
+}
+
+export type CustosEnvioMl = { senders?: { user_id?: number; compensation?: number | null }[] };
+
+const reais = (v: number) => v.toFixed(2).replace(".", ",");
+
+// Flex = logística "self_service" (formato antigo no topo, novo em logistic.type).
+export const ehFlex = (s: EnvioMl) => (s.logistic_type ?? s.logistic?.type) === "self_service";
+
+// Frete líquido do Flex: transportadora menos o estorno do ML ao vendedor (pode ficar negativo).
+export function freteFlex(c: CustosEnvioMl, vendedorId: string) {
+  const s = c.senders?.find((x) => String(x.user_id) === vendedorId) ?? c.senders?.[0];
+  const estorno = Math.round((s?.compensation ?? 0) * 100) / 100;
+  return {
+    frete: Math.round((CUSTO_FLEX - estorno) * 100) / 100,
+    nota: `Flex: transportadora R$ ${reais(CUSTO_FLEX)} − estorno ML R$ ${reais(estorno)}`,
+  };
 }
