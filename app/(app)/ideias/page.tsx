@@ -32,12 +32,14 @@ export default async function Ideias({ searchParams }: { searchParams: Promise<{
   const ordem = sp.o === "recentes" ? "recentes" : "votos";
   const categoria = sp.c || null;
 
-  const [todasR, boardsR] = await Promise.all([
+  const [todasR, boardsR, simsR] = await Promise.all([
     sql`SELECT * FROM ideias ORDER BY created_at DESC`,
     sql`SELECT id, nome FROM kanban_boards ORDER BY posicao, id`,
+    sql`SELECT DISTINCT ON (ideia_id) ideia_id, id FROM calc_simulacoes WHERE ideia_id IS NOT NULL ORDER BY ideia_id, updated_at DESC`,
   ]);
   const todas = todasR as Ideia[];
   const boards = boardsR as { id: number; nome: string }[];
+  const simulacao = new Map((simsR as { ideia_id: number; id: number }[]).map((s) => [s.ideia_id, s.id]));
 
   const categorias = [...new Set(todas.map((i) => i.categoria).filter(Boolean))] as string[];
   const contagem = (s: string) => todas.filter((i) => (s === "ativas" ? i.status !== "descartada" : s === "todas" ? true : i.status === s)).length;
@@ -138,7 +140,7 @@ export default async function Ideias({ searchParams }: { searchParams: Promise<{
       ) : (
         <div className="columns-1 gap-4 md:columns-2 xl:columns-3 [&>*]:mb-4">
           {lista.map((i) => (
-            <IdeiaCard key={i.id} ideia={i} boards={boards} />
+            <IdeiaCard key={i.id} ideia={i} boards={boards} simulacaoId={simulacao.get(i.id) ?? null} />
           ))}
         </div>
       )}
@@ -146,7 +148,7 @@ export default async function Ideias({ searchParams }: { searchParams: Promise<{
   );
 }
 
-function IdeiaCard({ ideia: i, boards }: { ideia: Ideia; boards: { id: number; nome: string }[] }) {
+function IdeiaCard({ ideia: i, boards, simulacaoId }: { ideia: Ideia; boards: { id: number; nome: string }[]; simulacaoId: number | null }) {
   const custo = i.custo_estimado != null ? Number(i.custo_estimado) : null;
   const preco = i.preco_estimado != null ? Number(i.preco_estimado) : null;
   const margem = custo != null && preco != null && preco > 0 ? preco - custo : null;
@@ -205,6 +207,13 @@ function IdeiaCard({ ideia: i, boards }: { ideia: Ideia; boards: { id: number; n
           </div>
         </dl>
       )}
+
+      <Link
+        href={simulacaoId ? `/calculadora/${simulacaoId}` : `/calculadora/nova?ideia=${i.id}`}
+        className="inline-flex items-center gap-1 text-xs text-accent hover:underline"
+      >
+        <Icone nome="calculadora" className="size-3.5" /> {simulacaoId ? "Ver cálculo de custo" : "Calcular custo e margem"}
+      </Link>
 
       {i.link && (
         <a href={i.link} target="_blank" rel="noopener noreferrer" className="inline-flex max-w-full items-center gap-1 text-xs text-accent hover:underline">

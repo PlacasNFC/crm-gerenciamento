@@ -19,6 +19,13 @@ const GRUPOS: { titulo: string; itens: Item[] }[] = [
     ],
   },
   {
+    titulo: "Produção",
+    itens: [
+      { href: "/calculadora", label: "Calculadora de custo", icone: "calculadora" },
+      { href: "/estoque", label: "Estoque de insumos", icone: "estoque" },
+    ],
+  },
+  {
     titulo: "Organização",
     itens: [
       { href: "/kanban", label: "Kanban", icone: "kanban" },

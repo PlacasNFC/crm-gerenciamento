@@ -11,6 +11,8 @@ CRM simples para controlar vendas (Mercado Livre, Shopee, TikTok Shop, direto), 
 - **Vendas** — cadastro/edição de pedidos com taxas, frete e custo
 - **Entregas** — pedidos em aberto, status e código de rastreio
 - **Entradas e saídas** — despesas e receitas fora dos marketplaces
+- **Calculadora de custo** — custo de peça impressa em 3D (filamento do estoque, energia, máquina, falhas, mão de obra, insumos), margens e preço sugerido por canal
+- **Estoque de insumos** — filamentos (R$/kg), chips NFC, embalagens, etiquetas; compras com custo médio, baixas e contagem
 - **Integrações** — conexão com o Mercado Livre e importação de pedidos
 
 ## Rodar local
