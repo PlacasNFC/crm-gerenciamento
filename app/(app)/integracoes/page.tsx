@@ -43,8 +43,8 @@ export default async function Integracoes({
           </span>
         </div>
         <p className="text-sm text-muted">
-          Importa pedidos pagos como vendas (com a tarifa do ML), cancela as vendas de pedidos cancelados e atualiza a entrega pelo status do
-          envio. Roda sozinho uma vez por dia e em tempo real pelas notificações do ML; use o botão para importar agora.
+          Importa pedidos pagos como vendas (com a tarifa do ML), cancela as vendas de pedidos cancelados, marca como devolvidas as que
+          foram estornadas, desconta reembolsos parciais e atualiza a entrega pelo status do envio. Roda sozinho uma vez por dia e em tempo real pelas notificações do ML; use o botão para importar agora.
         </p>
         {ml?.ultima_sync && <p className="text-sm">Última importação: {fmt(ml.ultima_sync)}</p>}
         {ml?.ultimo_erro && <p className="text-sm text-red-600">Último erro: {ml.ultimo_erro}</p>}
@@ -63,7 +63,7 @@ export default async function Integracoes({
           <div className="flex flex-wrap items-end gap-3">
             <form action={sincronizarMl} className="flex flex-wrap items-end gap-2">
               <label className="field">
-                <span>Na primeira vez, buscar últimos (dias)</span>
+                <span>Revisar pedidos dos últimos (dias)</span>
                 <input type="number" name="dias" min={1} max={90} defaultValue={30} className="w-28" />
               </label>
               <button className="btn">Importar pedidos agora</button>

@@ -9,13 +9,28 @@ export type PedidoMl = {
   buyer?: { id: number; nickname?: string };
   shipping?: { id: number | null };
   order_items: { item: { id: string; title: string }; quantity: number; unit_price: number; sale_fee: number | null }[];
+  payments?: { status: string; transaction_amount?: number | null; transaction_amount_refunded?: number | null }[];
 };
 
+const ESTORNO = new Set(["refunded", "charged_back"]);
+
+// Valor já devolvido ao comprador (reembolso parcial, total ou chargeback).
+export function valorEstornado(p: PedidoMl) {
+  const v = (p.payments ?? []).reduce(
+    (a, pg) => a + (pg.transaction_amount_refunded || (ESTORNO.has(pg.status) ? pg.transaction_amount ?? 0 : 0)),
+    0,
+  );
+  return Math.round(v * 100) / 100;
+}
+
 // Mapeia o status do pedido do ML para o status de entrega do CRM. null = ainda não é venda (pagamento pendente).
-export function statusDoPedido(status: string): "a_enviar" | "cancelado" | null {
-  if (status === "cancelled" || status === "invalid") return "cancelado";
-  if (status === "paid" || status === "partially_refunded") return "a_enviar";
-  return null;
+// Em devoluções e mediações o ML costuma manter o pedido como "paid": o estorno aparece só no pagamento.
+export function statusDoPedido(p: PedidoMl): "a_enviar" | "cancelado" | "devolvido" | null {
+  if (p.status === "cancelled" || p.status === "invalid" || p.status === "pending_cancel") return "cancelado";
+  if (p.status !== "paid" && p.status !== "partially_refunded") return null;
+  const pgs = p.payments ?? [];
+  if (pgs.some((pg) => ESTORNO.has(pg.status)) && !pgs.some((pg) => pg.status === "approved")) return "devolvido";
+  return "a_enviar";
 }
 
 export function statusDoEnvio(status: string | undefined): "enviado" | "entregue" | "devolvido" | null {
@@ -35,7 +50,8 @@ export function vendaDoPedido(p: PedidoMl) {
     cliente: p.buyer?.nickname ?? null,
     produto: unico ? itens[0].item.title : itens.map((i) => `${i.quantity}× ${i.item.title}`).join(", "),
     quantidade: unico ? itens[0].quantity : 1,
-    valor_bruto: p.total_amount,
+    // desconta reembolsos parciais
+    valor_bruto: Math.max(0, Math.round((p.total_amount - valorEstornado(p)) * 100) / 100),
     // sale_fee vem por unidade
     taxa_plataforma: Math.round(itens.reduce((a, i) => a + (i.sale_fee ?? 0) * i.quantity, 0) * 100) / 100,
     observacoes:

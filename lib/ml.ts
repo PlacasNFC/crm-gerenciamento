@@ -1,7 +1,7 @@
 // Integração Mercado Livre: OAuth 2.0 + importação de pedidos (cron diário, botão manual e notificações).
 // Access token dura 6h; o refresh token é de uso único (cada refresh devolve um novo).
 import { sql } from "./db";
-import { regiaoDoEnvio, statusDoEnvio, statusDoPedido, vendaDoPedido, type EnvioMl, type PedidoMl } from "./ml-map";
+import { regiaoDoEnvio, statusDoEnvio, statusDoPedido, valorEstornado, vendaDoPedido, type EnvioMl, type PedidoMl } from "./ml-map";
 
 const API = "https://api.mercadolibre.com";
 const AUTH = "https://auth.mercadolivre.com.br/authorization";
@@ -85,26 +85,32 @@ async function get<T>(path: string, token: string): Promise<T> {
   return r.json() as Promise<T>;
 }
 
-// Cria a venda de um pedido pago ou cancela a já existente. Devolve o que mudou.
+// Cria a venda de um pedido pago, cancela/devolve a já existente ou desconta reembolso parcial. Devolve o que mudou.
 async function importarPedido(p: PedidoMl): Promise<"novo" | "atualizado" | null> {
-  const st = statusDoPedido(p.status);
+  const st = statusDoPedido(p);
   if (!st) return null;
   const id = String(p.id);
-  if (st === "cancelado") {
-    const upd = await sql`UPDATE vendas SET status_entrega = 'cancelado'
+  if (st !== "a_enviar") {
+    const upd = await sql`UPDATE vendas SET status_entrega = ${st}
       WHERE canal = ${CANAL} AND pedido_externo = ${id} AND status_entrega NOT IN ('cancelado','devolvido') RETURNING id`;
     return upd.length ? "atualizado" : null;
   }
   const v = vendaDoPedido(p);
   // trava por pedido: cron, botão e notificação podem importar o mesmo pedido ao mesmo tempo
-  const [, ins] = await sql.transaction([
+  const [, ins, reemb] = await sql.transaction([
     sql`SELECT pg_advisory_xact_lock(hashtext(${`ml:${id}`}))`,
     sql`INSERT INTO vendas (data, canal, pedido_externo, cliente, produto, quantidade, valor_bruto, taxa_plataforma, observacoes)
       SELECT ${v.data}::date, ${CANAL}, ${id}, ${v.cliente}, ${v.produto}, ${v.quantidade}, ${v.valor_bruto}, ${v.taxa_plataforma}, ${v.observacoes}
       WHERE NOT EXISTS (SELECT 1 FROM vendas WHERE canal = ${CANAL} AND pedido_externo = ${id})
       RETURNING id`,
+    // reembolso parcial depois da importação: baixa o valor da venda já existente
+    ...(valorEstornado(p) > 0
+      ? [sql`UPDATE vendas SET valor_bruto = ${v.valor_bruto}
+          WHERE canal = ${CANAL} AND pedido_externo = ${id} AND valor_bruto > ${v.valor_bruto} RETURNING id`]
+      : []),
   ]);
-  return (ins as unknown[]).length ? "novo" : null;
+  if ((ins as unknown[]).length) return "novo";
+  return (reemb as unknown[] | undefined)?.length ? "atualizado" : null;
 }
 
 // Grava estado e cidade do destinatário, se a venda ainda não tiver.
@@ -140,23 +146,33 @@ async function preencherRegioes(token: string, limite = 60) {
   }
 }
 
-export async function sincronizar({ dias = 30 } = {}) {
+// Cron: pedidos alterados desde a última importação (pega cancelamento/estorno de pedido antigo).
+// Botão (com `dias`): também revisa todos os pedidos criados nesse período.
+export async function sincronizar({ dias }: { dias?: number } = {}) {
   const i = await tokenAtual();
   try {
-    const desde = i.ultima_sync
-      ? new Date(new Date(i.ultima_sync).getTime() - 2 * 864e5) // margem para pedidos que mudaram de status
-      : new Date(Date.now() - dias * 864e5);
+    const filtros: Record<string, string>[] = [];
+    if (i.ultima_sync) {
+      // margem para atrasos do ML
+      filtros.push({ "order.last_updated.from": new Date(new Date(i.ultima_sync).getTime() - 2 * 864e5).toISOString() });
+    }
+    if (dias || !i.ultima_sync) {
+      filtros.push({ "order.date_created.from": new Date(Date.now() - (dias ?? 30) * 864e5).toISOString() });
+    }
 
-    let novos = 0, atualizados = 0, offset = 0, total = Infinity;
-    while (offset < total && offset < 2000) {
-      const q = new URLSearchParams({ seller: i.conta_id, "order.date_created.from": desde.toISOString(), sort: "date_asc", offset: String(offset), limit: "50" });
-      const pag = await get<{ results: PedidoMl[]; paging: { total: number } }>(`/orders/search?${q}`, i.access_token);
-      total = pag.paging.total;
-      offset += 50;
-      for (const p of pag.results) {
-        const r = await importarPedido(p);
-        if (r === "novo") novos++;
-        else if (r === "atualizado") atualizados++;
+    let novos = 0, atualizados = 0;
+    for (const filtro of filtros) {
+      let offset = 0, total = Infinity;
+      while (offset < total && offset < 2000) {
+        const q = new URLSearchParams({ seller: i.conta_id, ...filtro, sort: "date_asc", offset: String(offset), limit: "50" });
+        const pag = await get<{ results: PedidoMl[]; paging: { total: number } }>(`/orders/search?${q}`, i.access_token);
+        total = pag.paging.total;
+        offset += 50;
+        for (const p of pag.results) {
+          const r = await importarPedido(p);
+          if (r === "novo") novos++;
+          else if (r === "atualizado") atualizados++;
+        }
       }
     }
 
