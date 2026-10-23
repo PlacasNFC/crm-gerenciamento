@@ -130,14 +130,34 @@ async function gravarEnvio(vendaId: number, s: EnvioMl) {
     WHERE id = ${vendaId}`;
 }
 
+type VendaEnvio = { id: number; pedido_externo: string | null };
+
 // Atualiza a entrega pelo status do envio (e a região e a logística). Devolve true se o status mudou.
-async function atualizarEnvio(vendaId: number, envioId: string, token: string) {
+async function atualizarEnvio(v: VendaEnvio, envioId: string, token: string): Promise<boolean> {
   const s = await get<EnvioMl>(`/shipments/${envioId}`, token);
-  await gravarEnvio(vendaId, s);
+  await gravarEnvio(v.id, s);
+  if (s.status === "cancelled" && v.pedido_externo) return envioCancelado(v, v.pedido_externo, envioId, token);
   const novo = statusDoEnvio(s.status);
   if (!novo) return false;
   const upd = await sql`UPDATE vendas SET status_entrega = ${novo}, codigo_rastreio = COALESCE(${s.tracking_number ?? null}, codigo_rastreio)
-    WHERE id = ${vendaId} AND status_entrega <> ${novo} RETURNING id`;
+    WHERE id = ${v.id} AND status_entrega <> ${novo} RETURNING id`;
+  return upd.length > 0;
+}
+
+// Envio cancelado: quem decide é o pedido. Se o ML só trocou o envio (endereço ou pacote refeito), passa a acompanhar
+// o novo; senão a venda não sai mais (cancelada, ou devolvida se o pagamento foi estornado).
+async function envioCancelado(v: VendaEnvio, pedidoId: string, envioId: string, token: string) {
+  const p = await get<PedidoMl>(`/orders/${pedidoId}`, token);
+  const st = statusDoPedido(p);
+  const outroEnvio = p.shipping?.id ? String(p.shipping.id) : null;
+  if (st === "a_enviar" && outroEnvio && outroEnvio !== envioId) {
+    await sql`UPDATE vendas SET observacoes = regexp_replace(observacoes, ${`Envio ${envioId}\\M`}, ${`Envio ${outroEnvio}`})
+      WHERE id = ${v.id}`;
+    return atualizarEnvio(v, outroEnvio, token);
+  }
+  const final = st === "devolvido" ? "devolvido" : "cancelado";
+  const upd = await sql`UPDATE vendas SET status_entrega = ${final}
+    WHERE id = ${v.id} AND status_entrega NOT IN ('cancelado','devolvido') RETURNING id`;
   return upd.length > 0;
 }
 
@@ -187,13 +207,13 @@ export async function sincronizar({ dias }: { dias?: number } = {}) {
     }
 
     // atualiza a entrega dos pedidos em aberto pelo status do envio
-    const abertos = (await sql`SELECT id, observacoes FROM vendas WHERE canal = ${CANAL} AND observacoes LIKE '%Envio %'
-      AND status_entrega IN ('a_enviar','enviado') ORDER BY id DESC LIMIT 500`) as { id: number; observacoes: string }[];
+    const abertos = (await sql`SELECT id, pedido_externo, observacoes FROM vendas WHERE canal = ${CANAL} AND observacoes LIKE '%Envio %'
+      AND status_entrega IN ('a_enviar','enviado') ORDER BY id DESC LIMIT 500`) as (VendaEnvio & { observacoes: string })[];
     await emLotes(abertos, 5, async (v) => {
       const envio = /Envio (\d+)/.exec(v.observacoes)?.[1];
       if (!envio) return;
       try {
-        if (await atualizarEnvio(v.id, envio, i.access_token)) atualizados++;
+        if (await atualizarEnvio(v, envio, i.access_token)) atualizados++;
       } catch (e) {
         // envio indisponível (ex.: Full/sem permissão): mantém o status manual
         console.error("envio ML", envio, (e as Error).message);
@@ -224,9 +244,9 @@ export async function processarNotificacao(n: NotificacaoMl) {
   if (pedido) {
     await importarPedido(await get<PedidoMl>(`/orders/${pedido}`, access_token));
   } else if (envio) {
-    const vendas = (await sql`SELECT id FROM vendas WHERE canal = ${CANAL}
-      AND status_entrega IN ('a_enviar','enviado') AND observacoes ~ ${`Envio ${envio}\\M`}`) as { id: number }[];
-    for (const v of vendas) await atualizarEnvio(v.id, envio, access_token);
+    const vendas = (await sql`SELECT id, pedido_externo FROM vendas WHERE canal = ${CANAL}
+      AND status_entrega IN ('a_enviar','enviado') AND observacoes ~ ${`Envio ${envio}\\M`}`) as VendaEnvio[];
+    for (const v of vendas) await atualizarEnvio(v, envio, access_token);
   }
 }
 
