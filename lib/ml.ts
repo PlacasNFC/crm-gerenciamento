@@ -221,7 +221,7 @@ export async function sincronizar({ dias }: { dias?: number } = {}) {
           pedido = `pedido ${p.status} (pagamento ${(p.payments ?? []).map((pg) => pg.status).join(", ") || "—"})`;
         }
         if (await atualizarEnvio(v, envio, i.access_token)) atualizados++;
-        if (pedido) await sql`UPDATE vendas SET status_ml = concat_ws(' · ', status_ml, ${pedido}) WHERE id = ${v.id}`;
+        if (pedido) await sql`UPDATE vendas SET status_ml = concat_ws(' · ', status_ml, ${pedido}::text) WHERE id = ${v.id}`;
       } catch (e) {
         // envio indisponível (ex.: Full/sem permissão): mantém o status manual
         const msg = (e as Error).message;
