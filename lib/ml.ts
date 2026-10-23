@@ -206,14 +206,22 @@ export async function sincronizar({ dias }: { dias?: number } = {}) {
       }
     }
 
-    // atualiza a entrega dos pedidos em aberto pelo status do envio
+    // pedidos em aberto: relê o pedido (a busca pode não trazer cancelamentos) e atualiza a entrega pelo status do envio
     const abertos = (await sql`SELECT id, pedido_externo, observacoes FROM vendas WHERE canal = ${CANAL} AND observacoes LIKE '%Envio %'
       AND status_entrega IN ('a_enviar','enviado') ORDER BY id DESC LIMIT 500`) as (VendaEnvio & { observacoes: string })[];
     await emLotes(abertos, 5, async (v) => {
       const envio = /Envio (\d+)/.exec(v.observacoes)?.[1];
       if (!envio) return;
       try {
+        let pedido: string | null = null;
+        if (v.pedido_externo) {
+          const p = await get<PedidoMl>(`/orders/${v.pedido_externo}`, i.access_token);
+          if ((await importarPedido(p)) === "atualizado") atualizados++;
+          if (statusDoPedido(p) !== "a_enviar") return;
+          pedido = `pedido ${p.status} (pagamento ${(p.payments ?? []).map((pg) => pg.status).join(", ") || "—"})`;
+        }
         if (await atualizarEnvio(v, envio, i.access_token)) atualizados++;
+        if (pedido) await sql`UPDATE vendas SET status_ml = concat_ws(' · ', status_ml, ${pedido}) WHERE id = ${v.id}`;
       } catch (e) {
         // envio indisponível (ex.: Full/sem permissão): mantém o status manual
         const msg = (e as Error).message;
