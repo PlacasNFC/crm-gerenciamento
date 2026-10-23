@@ -18,6 +18,7 @@ export type Venda = {
   observacoes: string | null;
   uf: string | null;
   cidade: string | null;
+  status_ml?: string | null;
 };
 
 export function VendaForm({

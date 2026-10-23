@@ -120,12 +120,12 @@ async function emLotes<T>(itens: T[], n: number, fn: (x: T) => Promise<void>) {
   for (let k = 0; k < itens.length; k += n) await Promise.all(itens.slice(k, k + n).map(fn));
 }
 
-// Grava a logística do envio e o estado e a cidade do destinatário (estes só se a venda ainda não tiver).
+// Grava o status e a logística do envio e o estado e a cidade do destinatário (estes só se a venda ainda não tiver).
 async function gravarEnvio(vendaId: number, s: EnvioMl) {
   const { uf, cidade } = regiaoDoEnvio(s);
   const logistica = logisticaDoEnvio(s);
-  if (!uf && !logistica) return;
-  await sql`UPDATE vendas SET logistica = COALESCE(${logistica}, logistica),
+  const statusMl = [s.status, s.substatus].filter(Boolean).join(" / ") || null;
+  await sql`UPDATE vendas SET logistica = COALESCE(${logistica}, logistica), status_ml = ${statusMl},
       cidade = CASE WHEN uf IS NULL AND ${uf}::text IS NOT NULL THEN ${cidade} ELSE cidade END, uf = COALESCE(uf, ${uf})
     WHERE id = ${vendaId}`;
 }
@@ -216,7 +216,9 @@ export async function sincronizar({ dias }: { dias?: number } = {}) {
         if (await atualizarEnvio(v, envio, i.access_token)) atualizados++;
       } catch (e) {
         // envio indisponível (ex.: Full/sem permissão): mantém o status manual
-        console.error("envio ML", envio, (e as Error).message);
+        const msg = (e as Error).message;
+        console.error("envio ML", envio, msg);
+        await sql`UPDATE vendas SET status_ml = ${`erro: ${msg}`.slice(0, 200)} WHERE id = ${v.id}`;
       }
     });
 

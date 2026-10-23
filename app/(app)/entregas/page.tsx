@@ -54,7 +54,10 @@ export default async function Entregas({ searchParams }: { searchParams: Promise
                     </span>
                   </td>
                   <td><Truncado texto={v.cliente} className="block max-w-[10rem] truncate" /></td>
-                  <td><StatusBadge status={v.status_entrega as StatusEntrega} /></td>
+                  <td>
+                    <StatusBadge status={v.status_entrega as StatusEntrega} />
+                    {v.status_ml && <span className="block text-xs text-muted" title="Status do envio no Mercado Livre">ML: {v.status_ml}</span>}
+                  </td>
                   <td>
                     <form action={atualizarEntrega.bind(null, v.id)} className="flex gap-2 items-center">
                       <select name="status_entrega" defaultValue={v.status_entrega} className="py-1">

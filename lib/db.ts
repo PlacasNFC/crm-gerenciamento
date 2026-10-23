@@ -49,6 +49,8 @@ export function ensureSchema() {
     sql`ALTER TABLE vendas ADD COLUMN IF NOT EXISTS cidade TEXT`,
     // tipo de logística do envio no ML (self_service = Flex), gravado na sincronização
     sql`ALTER TABLE vendas ADD COLUMN IF NOT EXISTS logistica TEXT`,
+    // status/substatus do envio como o ML devolveu na última consulta (ou o erro dela), para conferência
+    sql`ALTER TABLE vendas ADD COLUMN IF NOT EXISTS status_ml TEXT`,
     sql`CREATE TABLE IF NOT EXISTS pecas_produto (
       produto TEXT PRIMARY KEY,
       pecas INTEGER NOT NULL CHECK (pecas > 0)

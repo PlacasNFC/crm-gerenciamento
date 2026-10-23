@@ -61,6 +61,7 @@ export function vendaDoPedido(p: PedidoMl) {
 
 export type EnvioMl = {
   status?: string;
+  substatus?: string | null;
   tracking_number?: string | null;
   logistic_type?: string;
   logistic?: { type?: string };
