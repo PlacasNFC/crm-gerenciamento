@@ -2,7 +2,7 @@
 // Access token dura 6h; o refresh token é de uso único (cada refresh devolve um novo).
 import { sql } from "./db";
 import {
-  ehFlex, freteFlex, regiaoDoEnvio, statusDoEnvio, statusDoPedido, valorEstornado, vendaDoPedido,
+  ehFlex, freteFlex, logisticaDoEnvio, regiaoDoEnvio, statusDoEnvio, statusDoPedido, valorEstornado, vendaDoPedido,
   type CustosEnvioMl, type EnvioMl, type PedidoMl,
 } from "./ml-map";
 
@@ -116,11 +116,19 @@ async function importarPedido(p: PedidoMl): Promise<"novo" | "atualizado" | null
   return (reemb as unknown[] | undefined)?.length ? "atualizado" : null;
 }
 
-// Grava estado e cidade do destinatário, se a venda ainda não tiver.
-async function gravarRegiao(vendaId: number, s: EnvioMl) {
+// Roda `fn` em lotes paralelos de `n`, para a sincronização caber no tempo da função.
+async function emLotes<T>(itens: T[], n: number, fn: (x: T) => Promise<void>) {
+  for (let k = 0; k < itens.length; k += n) await Promise.all(itens.slice(k, k + n).map(fn));
+}
+
+// Grava a logística do envio e o estado e a cidade do destinatário (estes só se a venda ainda não tiver).
+async function gravarEnvio(vendaId: number, s: EnvioMl) {
   const { uf, cidade } = regiaoDoEnvio(s);
-  if (!uf) return;
-  await sql`UPDATE vendas SET uf = ${uf}, cidade = ${cidade} WHERE id = ${vendaId} AND uf IS NULL`;
+  const logistica = logisticaDoEnvio(s);
+  if (!uf && !logistica) return;
+  await sql`UPDATE vendas SET logistica = COALESCE(${logistica}, logistica),
+      cidade = CASE WHEN uf IS NULL AND ${uf}::text IS NOT NULL THEN ${cidade} ELSE cidade END, uf = COALESCE(uf, ${uf})
+    WHERE id = ${vendaId}`;
 }
 
 // Flex: grava o frete líquido (transportadora − estorno do ML) uma vez, sem mexer em frete digitado à mão.
@@ -138,7 +146,7 @@ async function gravarFreteFlex(vendaId: number, envioId: string, s: EnvioMl, i: 
 // Atualiza a entrega pelo status do envio (e a região e o frete Flex). Devolve true se o status ou o frete mudou.
 async function atualizarEnvio(vendaId: number, envioId: string, i: { access_token: string; conta_id: string }) {
   const s = await get<EnvioMl>(`/shipments/${envioId}`, i.access_token);
-  await gravarRegiao(vendaId, s);
+  await gravarEnvio(vendaId, s);
   const flex = await gravarFreteFlex(vendaId, envioId, s, i);
   const novo = statusDoEnvio(s.status);
   if (!novo) return flex;
@@ -151,15 +159,15 @@ async function atualizarEnvio(vendaId: number, envioId: string, i: { access_toke
 async function preencherRegioes(token: string, limite = 60) {
   const vendas = (await sql`SELECT id, observacoes FROM vendas WHERE canal = ${CANAL} AND uf IS NULL
     AND observacoes LIKE '%Envio %' ORDER BY id DESC LIMIT ${limite}`) as { id: number; observacoes: string }[];
-  for (const v of vendas) {
+  await emLotes(vendas, 5, async (v) => {
     const envio = /Envio (\d+)/.exec(v.observacoes)?.[1];
-    if (!envio) continue;
+    if (!envio) return;
     try {
-      await gravarRegiao(v.id, await get<EnvioMl>(`/shipments/${envio}`, token));
+      await gravarEnvio(v.id, await get<EnvioMl>(`/shipments/${envio}`, token));
     } catch {
       // envio sem acesso: fica sem região
     }
-  }
+  });
 }
 
 // Cron: pedidos alterados desde a última importação (pega cancelamento/estorno de pedido antigo).
@@ -192,20 +200,22 @@ export async function sincronizar({ dias }: { dias?: number } = {}) {
       }
     }
 
-    // atualiza entrega dos pedidos em aberto pelo status do envio; entregues recentes sem frete conferem se são Flex
+    // atualiza a entrega dos pedidos em aberto pelo status do envio (sempre primeiro, sem disputar vaga com o Flex)
     const abertos = (await sql`SELECT id, observacoes FROM vendas WHERE canal = ${CANAL} AND observacoes LIKE '%Envio %'
-      AND (status_entrega IN ('a_enviar','enviado')
-        OR (status_entrega = 'entregue' AND frete = 0 AND observacoes NOT LIKE '%Flex:%' AND data >= CURRENT_DATE - 60))
-      ORDER BY id DESC LIMIT 150`) as { id: number; observacoes: string }[];
-    for (const v of abertos) {
+      AND status_entrega IN ('a_enviar','enviado') ORDER BY id DESC LIMIT 500`) as { id: number; observacoes: string }[];
+    // entregues recentes sem frete conferem se são Flex; os já conferidos com outra logística ficam de fora
+    const semFrete = (await sql`SELECT id, observacoes FROM vendas WHERE canal = ${CANAL} AND observacoes LIKE '%Envio %'
+      AND status_entrega = 'entregue' AND frete = 0 AND observacoes NOT LIKE '%Flex:%' AND data >= CURRENT_DATE - 60
+      AND (logistica IS NULL OR logistica = 'self_service') ORDER BY id DESC LIMIT 100`) as { id: number; observacoes: string }[];
+    await emLotes([...abertos, ...semFrete], 5, async (v) => {
       const envio = /Envio (\d+)/.exec(v.observacoes)?.[1];
-      if (!envio) continue;
+      if (!envio) return;
       try {
         if (await atualizarEnvio(v.id, envio, i)) atualizados++;
       } catch {
         // envio indisponível (ex.: Full/sem permissão): mantém o status manual
       }
-    }
+    });
 
     await preencherRegioes(i.access_token);
 

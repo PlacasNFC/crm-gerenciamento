@@ -82,8 +82,11 @@ export type CustosEnvioMl = { senders?: { user_id?: number; compensation?: numbe
 
 const reais = (v: number) => v.toFixed(2).replace(".", ",");
 
-// Flex = logística "self_service" (formato antigo no topo, novo em logistic.type).
-export const ehFlex = (s: EnvioMl) => (s.logistic_type ?? s.logistic?.type) === "self_service";
+// Tipo de logística do envio (formato antigo no topo, novo em logistic.type).
+export const logisticaDoEnvio = (s: EnvioMl) => s.logistic_type ?? s.logistic?.type ?? null;
+
+// Flex = logística "self_service".
+export const ehFlex = (s: EnvioMl) => logisticaDoEnvio(s) === "self_service";
 
 // Frete líquido do Flex: transportadora menos o estorno do ML ao vendedor (pode ficar negativo).
 export function freteFlex(c: CustosEnvioMl, vendedorId: string) {
