@@ -32,6 +32,12 @@ export type StatusEntrega = keyof typeof STATUS_ENTREGA;
 export const brl = (v: number | string) =>
   Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
+// "YYYY-MM-DD" de uma coluna DATE (o driver pode devolver string ou Date à meia-noite local)
+export const dataISO = (d: string | Date) =>
+  typeof d === "string"
+    ? d.slice(0, 10)
+    : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
 export const dataBR = (d: string | Date) =>
   new Date(typeof d === "string" ? d.slice(0, 10) + "T12:00:00" : d).toLocaleDateString("pt-BR");
 

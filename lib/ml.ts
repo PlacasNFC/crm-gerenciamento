@@ -147,11 +147,18 @@ async function gravarFreteFlex(vendaId: number, envioId: string, s: EnvioMl, i: 
 async function atualizarEnvio(vendaId: number, envioId: string, i: { access_token: string; conta_id: string }) {
   const s = await get<EnvioMl>(`/shipments/${envioId}`, i.access_token);
   await gravarEnvio(vendaId, s);
-  const flex = await gravarFreteFlex(vendaId, envioId, s, i);
   const novo = statusDoEnvio(s.status);
-  if (!novo) return flex;
-  const upd = await sql`UPDATE vendas SET status_entrega = ${novo}, codigo_rastreio = COALESCE(${s.tracking_number ?? null}, codigo_rastreio)
-    WHERE id = ${vendaId} AND status_entrega <> ${novo} RETURNING id`;
+  const upd = novo
+    ? await sql`UPDATE vendas SET status_entrega = ${novo}, codigo_rastreio = COALESCE(${s.tracking_number ?? null}, codigo_rastreio)
+        WHERE id = ${vendaId} AND status_entrega <> ${novo} RETURNING id`
+    : [];
+  // falha nos custos do Flex não pode travar a entrega: o frete fica para a próxima sincronização
+  let flex = false;
+  try {
+    flex = await gravarFreteFlex(vendaId, envioId, s, i);
+  } catch (e) {
+    console.error("frete Flex ML", envioId, (e as Error).message);
+  }
   return upd.length > 0 || flex;
 }
 
@@ -212,8 +219,9 @@ export async function sincronizar({ dias }: { dias?: number } = {}) {
       if (!envio) return;
       try {
         if (await atualizarEnvio(v.id, envio, i)) atualizados++;
-      } catch {
+      } catch (e) {
         // envio indisponível (ex.: Full/sem permissão): mantém o status manual
+        console.error("envio ML", envio, (e as Error).message);
       }
     });
 

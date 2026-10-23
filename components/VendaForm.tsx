@@ -1,9 +1,9 @@
-import { CANAIS, STATUS_ENTREGA, hoje } from "@/lib/constants";
+import { CANAIS, STATUS_ENTREGA, dataISO, hoje } from "@/lib/constants";
 import { ESTADOS } from "@/lib/regioes";
 
 export type Venda = {
   id: number;
-  data: string;
+  data: string | Date;
   canal: string;
   pedido_externo: string | null;
   cliente: string | null;
@@ -34,7 +34,7 @@ export function VendaForm({
     <form action={action} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
       <label className="field">
         <span>Data</span>
-        <input type="date" name="data" defaultValue={d("data")?.slice(0, 10) ?? hoje()} required />
+        <input type="date" name="data" defaultValue={venda ? dataISO(venda.data) : hoje()} required />
       </label>
       <label className="field">
         <span>Canal</span>
