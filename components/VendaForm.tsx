@@ -70,7 +70,7 @@ export function VendaForm({
       </label>
       <label className="field">
         <span>Frete pago por você (R$)</span>
-        <input type="number" step="0.01" name="frete" defaultValue={d("frete") ?? "0"} />
+        <input type="number" step="0.01" min={0} name="frete" defaultValue={d("frete") ?? "0"} />
       </label>
       <label className="field">
         <span>Custo do produto (R$)</span>

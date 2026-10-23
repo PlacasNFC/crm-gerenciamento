@@ -2,8 +2,7 @@
 // Access token dura 6h; o refresh token é de uso único (cada refresh devolve um novo).
 import { sql } from "./db";
 import {
-  ehFlex, freteFlex, logisticaDoEnvio, regiaoDoEnvio, statusDoEnvio, statusDoPedido, valorEstornado, vendaDoPedido,
-  type CustosEnvioMl, type EnvioMl, type PedidoMl,
+  logisticaDoEnvio, regiaoDoEnvio, statusDoEnvio, statusDoPedido, valorEstornado, vendaDoPedido, type EnvioMl, type PedidoMl,
 } from "./ml-map";
 
 const API = "https://api.mercadolibre.com";
@@ -131,35 +130,15 @@ async function gravarEnvio(vendaId: number, s: EnvioMl) {
     WHERE id = ${vendaId}`;
 }
 
-// Flex: grava o frete líquido (transportadora − estorno do ML) uma vez, sem mexer em frete digitado à mão.
-// Os custos do envio só ficam fechados depois de despachado.
-async function gravarFreteFlex(vendaId: number, envioId: string, s: EnvioMl, i: { access_token: string; conta_id: string }) {
-  if (!ehFlex(s) || (s.status !== "shipped" && s.status !== "delivered")) return false;
-  const pendente = await sql`SELECT 1 FROM vendas WHERE id = ${vendaId} AND frete = 0 AND COALESCE(observacoes, '') NOT LIKE '%Flex:%'`;
-  if (!pendente.length) return false;
-  const { frete, nota } = freteFlex(await get<CustosEnvioMl>(`/shipments/${envioId}/costs`, i.access_token), i.conta_id);
-  const upd = await sql`UPDATE vendas SET frete = ${frete}, observacoes = concat_ws(' · ', observacoes, ${nota})
-    WHERE id = ${vendaId} AND frete = 0 AND COALESCE(observacoes, '') NOT LIKE '%Flex:%' RETURNING id`;
-  return upd.length > 0;
-}
-
-// Atualiza a entrega pelo status do envio (e a região e o frete Flex). Devolve true se o status ou o frete mudou.
-async function atualizarEnvio(vendaId: number, envioId: string, i: { access_token: string; conta_id: string }) {
-  const s = await get<EnvioMl>(`/shipments/${envioId}`, i.access_token);
+// Atualiza a entrega pelo status do envio (e a região e a logística). Devolve true se o status mudou.
+async function atualizarEnvio(vendaId: number, envioId: string, token: string) {
+  const s = await get<EnvioMl>(`/shipments/${envioId}`, token);
   await gravarEnvio(vendaId, s);
   const novo = statusDoEnvio(s.status);
-  const upd = novo
-    ? await sql`UPDATE vendas SET status_entrega = ${novo}, codigo_rastreio = COALESCE(${s.tracking_number ?? null}, codigo_rastreio)
-        WHERE id = ${vendaId} AND status_entrega <> ${novo} RETURNING id`
-    : [];
-  // falha nos custos do Flex não pode travar a entrega: o frete fica para a próxima sincronização
-  let flex = false;
-  try {
-    flex = await gravarFreteFlex(vendaId, envioId, s, i);
-  } catch (e) {
-    console.error("frete Flex ML", envioId, (e as Error).message);
-  }
-  return upd.length > 0 || flex;
+  if (!novo) return false;
+  const upd = await sql`UPDATE vendas SET status_entrega = ${novo}, codigo_rastreio = COALESCE(${s.tracking_number ?? null}, codigo_rastreio)
+    WHERE id = ${vendaId} AND status_entrega <> ${novo} RETURNING id`;
+  return upd.length > 0;
 }
 
 // Preenche a região das vendas que ainda não têm (pedidos antigos ou já entregues), aos poucos.
@@ -207,18 +186,14 @@ export async function sincronizar({ dias }: { dias?: number } = {}) {
       }
     }
 
-    // atualiza a entrega dos pedidos em aberto pelo status do envio (sempre primeiro, sem disputar vaga com o Flex)
+    // atualiza a entrega dos pedidos em aberto pelo status do envio
     const abertos = (await sql`SELECT id, observacoes FROM vendas WHERE canal = ${CANAL} AND observacoes LIKE '%Envio %'
       AND status_entrega IN ('a_enviar','enviado') ORDER BY id DESC LIMIT 500`) as { id: number; observacoes: string }[];
-    // entregues recentes sem frete conferem se são Flex; os já conferidos com outra logística ficam de fora
-    const semFrete = (await sql`SELECT id, observacoes FROM vendas WHERE canal = ${CANAL} AND observacoes LIKE '%Envio %'
-      AND status_entrega = 'entregue' AND frete = 0 AND observacoes NOT LIKE '%Flex:%' AND data >= CURRENT_DATE - 60
-      AND (logistica IS NULL OR logistica = 'self_service') ORDER BY id DESC LIMIT 100`) as { id: number; observacoes: string }[];
-    await emLotes([...abertos, ...semFrete], 5, async (v) => {
+    await emLotes(abertos, 5, async (v) => {
       const envio = /Envio (\d+)/.exec(v.observacoes)?.[1];
       if (!envio) return;
       try {
-        if (await atualizarEnvio(v.id, envio, i)) atualizados++;
+        if (await atualizarEnvio(v.id, envio, i.access_token)) atualizados++;
       } catch (e) {
         // envio indisponível (ex.: Full/sem permissão): mantém o status manual
         console.error("envio ML", envio, (e as Error).message);
@@ -245,13 +220,13 @@ export async function processarNotificacao(n: NotificacaoMl) {
   const envio = /^\/shipments\/(\d+)$/.exec(n.resource ?? "")?.[1];
   if (!pedido && !envio) return;
 
-  const t = await tokenAtual();
+  const { access_token } = await tokenAtual();
   if (pedido) {
-    await importarPedido(await get<PedidoMl>(`/orders/${pedido}`, t.access_token));
+    await importarPedido(await get<PedidoMl>(`/orders/${pedido}`, access_token));
   } else if (envio) {
     const vendas = (await sql`SELECT id FROM vendas WHERE canal = ${CANAL}
       AND status_entrega IN ('a_enviar','enviado') AND observacoes ~ ${`Envio ${envio}\\M`}`) as { id: number }[];
-    for (const v of vendas) await atualizarEnvio(v.id, envio, t);
+    for (const v of vendas) await atualizarEnvio(v.id, envio, access_token);
   }
 }
 
